@@ -1,0 +1,178 @@
+{
+  "info": {
+    "_postman_id": "nabra-auth-api",
+    "name": "Nabra Backend - Authentication API",
+    "description": "Complete authentication and user management API for Nabra Backend\n\nBase URL: http://localhost:8080\nAPI Version: v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register New User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser123\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"displayName\": \"Test User\",\n  \"userType\": \"HEARING\",\n  \"preferredLanguage\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new user account\n\nRequired fields:\n- username: 3-50 characters, unique\n- email: valid email, unique\n- password: minimum 8 characters\n- displayName: 2-80 characters\n- userType: DEAF, MUTE, HEARING, INSTRUCTOR, OTHER\n\nOptional fields:\n- preferredLanguage: 'ar' or 'en' (default: 'ar')"
+          },
+          "response": []
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser123\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Authenticate user and get JWT access token\n\nRequired fields:\n- username: registered username\n- password: user password"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/validate?token=your_jwt_token_here",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "validate"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "your_jwt_token_here"
+                }
+              ]
+            },
+            "description": "Validate if a JWT token is still valid\n\nQuery Parameters:\n- token: JWT token to validate"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Profile (Protected)",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/me",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "me"]
+            },
+            "description": "Get authenticated user's profile information\n\nRequired Headers:\n- Authorization: Bearer <JWT_TOKEN>"
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"SecurePass123!\",\n  \"newPassword\": \"NewSecurePass456!\",\n  \"confirmPassword\": \"NewSecurePass456!\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/change-password",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "change-password"]
+            },
+            "description": "Change password for authenticated user\n\nRequired Headers:\n- Authorization: Bearer <JWT_TOKEN>\n\nRequired fields:\n- currentPassword: user's current password\n- newPassword: new password (minimum 8 characters)\n- confirmPassword: confirmation of new password (must match newPassword)"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/auth/logout",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Logout user (client should discard JWT token)\n\nRequired Headers:\n- Authorization: Bearer <JWT_TOKEN>\n\nNote: In stateless JWT authentication, logout is handled on the client side by discarding the token. This endpoint exists for audit/logging purposes."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

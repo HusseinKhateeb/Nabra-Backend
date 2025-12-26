@@ -1,5 +1,6 @@
 package com.nabra.backend.modules.usermanagement.dto;
 
+import com.nabra.backend.common.model.Enums.UserStatus;
 import com.nabra.backend.common.model.Enums.UserType;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -13,8 +14,7 @@ public class AuthDtos {
       @NotBlank @Email String email,
       @NotBlank @Size(min = 8, max = 80) String password,
       @NotBlank @Size(min = 2, max = 80) String displayName,
-      @NotNull UserType userType,
-      String preferredLanguage
+      @NotNull UserType userType
   ) {}
 
   public record LoginRequest(
@@ -27,7 +27,23 @@ public class AuthDtos {
       String tokenType,
       String userId,
       String username,
+      String email,
       String role,
-      String preferredLanguage
+      UserStatus status,
+      boolean emailVerified
+  ) {}
+
+  public record ChangePasswordRequest(
+      @NotBlank String currentPassword,
+      @NotBlank @Size(min = 8, max = 80) String newPassword,
+      @NotBlank @Size(min = 8, max = 80) String confirmPassword
+  ) {}
+
+  public record RefreshTokenRequest(
+      @NotBlank String refreshToken
+  ) {}
+
+  public record LogoutRequest(
+      String refreshToken
   ) {}
 }

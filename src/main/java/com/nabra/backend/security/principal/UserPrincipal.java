@@ -1,5 +1,6 @@
 package com.nabra.backend.security.principal;
 
+import com.nabra.backend.common.model.Enums.UserStatus;
 import com.nabra.backend.modules.usermanagement.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
@@ -38,14 +39,22 @@ public class UserPrincipal implements UserDetails {
   }
 
   @Override
-  public boolean isAccountNonExpired() { return true; }
+  public boolean isAccountNonExpired() {
+    return true;
+  }
 
   @Override
-  public boolean isAccountNonLocked() { return true; }
+  public boolean isAccountNonLocked() {
+    return user.getStatus() != UserStatus.SUSPENDED;
+  }
 
   @Override
-  public boolean isCredentialsNonExpired() { return true; }
+  public boolean isCredentialsNonExpired() {
+    return true;
+  }
 
   @Override
-  public boolean isEnabled() { return true; }
+  public boolean isEnabled() {
+    return user.getStatus() == UserStatus.ACTIVE;
+  }
 }
