@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    container_name: nabra-postgres
+    environment:
+      POSTGRES_DB: nabra
+      POSTGRES_USER: nabra
+      POSTGRES_PASSWORD: nabra
+    ports:
+      - "5432:5432"
+    volumes:
+      - nabra_pgdata:/var/lib/postgresql/data
+volumes:
+  nabra_pgdata:

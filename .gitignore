@@ -1,0 +1,12 @@
+/target/
+/.idea/
+*.iml
+*.log
+.DS_Store
+.env
+
+# IntelliJ
+/out/
+
+# VS Code
+.vscode/
