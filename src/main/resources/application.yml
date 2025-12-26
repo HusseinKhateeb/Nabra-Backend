@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: nabra-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nabra
+    username: nabra
+    password: nabra
+  jpa:
+    hibernate:
+      ddl-auto: update  # for scaffold/dev; use migrations in production
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    time-zone: UTC
+
+server:
+  port: 8080
+
+app:
+  security:
+    jwt:
+      # IMPORTANT: set a long, random secret in production (min 32 chars)
+      secret: "change-me-change-me-change-me-change-me"
+      expirationSeconds: 86400
+  ai:
+    # Optional microservices, enable by setting baseUrl(s)
+    lipreading:
+      baseUrl: ""
+    prediction:
+      baseUrl: ""
+    stt:
+      baseUrl: ""
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+
