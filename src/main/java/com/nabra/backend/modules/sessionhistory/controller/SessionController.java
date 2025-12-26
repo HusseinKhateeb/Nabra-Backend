@@ -45,9 +45,9 @@ public class SessionController {
   @GetMapping
   public ResponseEntity<Page<SessionDtos.SessionResponse>> list(
       @Parameter(description = "Filter: from (inclusive) ISO instant")
-      @RequestParam Optional<@DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant> from,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> from,
       @Parameter(description = "Filter: to (inclusive) ISO instant")
-      @RequestParam Optional<@DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant> to,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> to,
       @Parameter(description = "Filter: outputType TEXT|VOICE")
       @RequestParam Optional<String> outputType,
       @Parameter(description = "Filter: keyword in result text")
