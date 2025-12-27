@@ -23,6 +23,12 @@ app:
       # IMPORTANT: set a long, random secret in production (min 32 chars)
       secret: "change-me-change-me-change-me-change-me"
       expirationSeconds: 86400
+  frontend:
+    # Update these URLs for your frontend in production
+    allowedOrigins:
+      - "http://localhost:3000"
+      - "http://localhost:3001"
+      - "http://localhost:4200"
   ai:
     # Optional microservices, enable by setting baseUrl(s)
     lipreading:
