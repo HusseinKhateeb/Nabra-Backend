@@ -1,18 +1,33 @@
 spring:
   application:
     name: nabra-backend
+
   datasource:
     url: jdbc:postgresql://localhost:5432/nabra
     username: postgres
     password: MST
+
   jpa:
     hibernate:
-      ddl-auto: update  # for scaffold/dev; use migrations in production
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+
   jackson:
     time-zone: UTC
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: odehteam935@gmail.com
+    password: towdnaeenrkzeuhi
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   port: 8080
@@ -20,17 +35,16 @@ server:
 app:
   security:
     jwt:
-      # IMPORTANT: set a long, random secret in production (min 32 chars)
       secret: "change-me-change-me-change-me-change-me"
       expirationSeconds: 86400
+
   frontend:
-    # Update these URLs for your frontend in production
     allowedOrigins:
       - "http://localhost:3000"
       - "http://localhost:3001"
       - "http://localhost:4200"
+
   ai:
-    # Optional microservices, enable by setting baseUrl(s)
     lipreading:
       baseUrl: ""
     prediction:
@@ -41,4 +55,3 @@ app:
 logging:
   level:
     org.hibernate.SQL: debug
-

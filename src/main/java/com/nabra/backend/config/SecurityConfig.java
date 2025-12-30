@@ -1,6 +1,7 @@
 package com.nabra.backend.config;
 
 import com.nabra.backend.security.jwt.JwtAuthenticationFilter;
+import com.nabra.backend.security.principal.DbUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,82 +15,77 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.http.HttpMethod;
 
-import com.nabra.backend.security.principal.DbUserDetailsService;
-
-/**
- * Security configuration for the application.
- * Configures JWT-based stateless authentication, CSRF protection,
- * and authorization rules for API endpoints.
- */
 @Configuration
-@EnableMethodSecurity(
-    securedEnabled = true,
-    jsr250Enabled = true,
-    prePostEnabled = true
-)
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final DbUserDetailsService userDetailsService;
 
-  /**
-   * Configure password encoder (BCrypt).
-   */
   @Bean
   public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder(12); // Cost 12 for stronger hashing
+    return new BCryptPasswordEncoder(12);
   }
 
-  /**
-   * Configure authentication manager with DAO provider.
-   */
   @Bean
-  public AuthenticationManager authenticationManager(PasswordEncoder passwordEncoder) {
+  public AuthenticationManager authenticationManager(
+      PasswordEncoder passwordEncoder
+  ) {
     DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
     provider.setUserDetailsService(userDetailsService);
     provider.setPasswordEncoder(passwordEncoder);
     return new ProviderManager(provider);
   }
 
-  /**
-   * Configure security filter chain.
-   * - Disables CSRF (stateless JWT doesn't need it)
-   * - Uses STATELESS session policy (no sessions)
-   * - Permits public endpoints (auth, swagger, health)
-   * - Requires authentication for all other endpoints
-   * - Adds JWT filter before username/password filter
-   */
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.addAllowedOriginPattern("http://localhost:*");
+    config.addAllowedOriginPattern("http://127.0.0.1:*");
+    config.addAllowedMethod("*");
+    config.addAllowedHeader("*");
+    config.setAllowCredentials(true);
+
+    UrlBasedCorsConfigurationSource source =
+        new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", config);
+    return source;
+  }
+
+  @Bean
+  public SecurityFilterChain securityFilterChain(HttpSecurity http)
+      throws Exception {
+
     http
-        // CSRF disabled for stateless JWT-based API
+        .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .csrf(csrf -> csrf.disable())
-
-        // Stateless session policy - no session management
-        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-        // Authorization rules
+        .sessionManagement(sm ->
+            sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        )
         .authorizeHttpRequests(auth -> auth
-            // Public endpoints - no authentication required
+            // ⭐⭐ هذا السطر يحل المشكلة ⭐⭐
+            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
             .requestMatchers(
-                "/v3/api-docs/**",           // OpenAPI docs
-                "/swagger-ui/**",             // Swagger UI
-                "/swagger-ui.html",           // Swagger UI HTML
-                "/api/v1/auth/register",      // User registration
-                "/api/v1/auth/login",         // User login
-                "/api/v1/auth/validate",      // Token validation
-                "/actuator/health",           // Health check
-                "/actuator/health/**"         // Health check endpoints
+                "/api/v1/auth/**",
+                "/v3/api-docs/**",
+                "/swagger-ui/**",
+                "/swagger-ui.html",
+                "/actuator/health/**"
             ).permitAll()
 
-            // All other requests require authentication
             .anyRequest().authenticated()
         )
-
-        // Add JWT authentication filter before standard filter
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        .addFilterBefore(
+            jwtAuthenticationFilter,
+            UsernamePasswordAuthenticationFilter.class
+        );
 
     return http.build();
   }

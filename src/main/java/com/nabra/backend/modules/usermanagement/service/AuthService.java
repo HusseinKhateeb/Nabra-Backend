@@ -9,22 +9,22 @@ import com.nabra.backend.modules.usermanagement.exception.UserNotFoundException;
 import com.nabra.backend.modules.usermanagement.model.User;
 import com.nabra.backend.modules.usermanagement.repository.UserRepository;
 import com.nabra.backend.security.jwt.JwtService;
+import com.nabra.backend.security.mail.MailService;
+import com.nabra.backend.security.password.PasswordResetToken;
+import com.nabra.backend.security.password.PasswordResetTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Random;
 
-/**
- * Service for handling user authentication and authorization.
- * Manages login, registration, password changes, and token operations.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -34,31 +34,24 @@ public class AuthService {
   private final PasswordEncoder passwordEncoder;
   private final AuthenticationManager authenticationManager;
   private final JwtService jwtService;
+  private final PasswordResetTokenRepository resetTokenRepository;
 
-  /**
-   * Register a new user with validation.
-   *
-   * @param req Registration request containing username, email, password, displayName, userType
-   * @return AuthResponse with JWT access token
-   * @throws UserAlreadyExistsException if username or email already exists
-   */
+private final MailService mailService;
+
+  // ============================
+  // REGISTER
+  // ============================
   @Transactional
   public AuthDtos.AuthResponse register(AuthDtos.RegisterRequest req) {
-    log.info("Registering new user with username: {}", req.username());
 
-    // Validate username uniqueness
     if (userRepository.existsByUsername(req.username())) {
-      log.warn("Registration failed: Username already exists: {}", req.username());
-      throw new UserAlreadyExistsException("Username '" + req.username() + "' is already taken");
+      throw new UserAlreadyExistsException("Username already taken");
     }
 
-    // Validate email uniqueness
     if (userRepository.existsByEmail(req.email())) {
-      log.warn("Registration failed: Email already exists: {}", req.email());
-      throw new UserAlreadyExistsException("Email '" + req.email() + "' is already registered");
+      throw new UserAlreadyExistsException("Email already registered");
     }
 
-    // Create new user
     User user = new User();
     user.setUsername(req.username());
     user.setEmail(req.email());
@@ -67,13 +60,15 @@ public class AuthService {
     user.setPasswordHash(passwordEncoder.encode(req.password()));
     user.setRole(UserRole.USER);
     user.setStatus(UserStatus.ACTIVE);
-    user.setEmailVerified(false); // Email verification can be implemented later
+    user.setEmailVerified(false);
 
     User savedUser = userRepository.save(user);
-    log.info("User registered successfully with id: {}", savedUser.getId());
 
-    // Generate JWT token
-    String token = jwtService.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getRole().name());
+    String token = jwtService.generateToken(
+        savedUser.getId(),
+        savedUser.getUsername(),
+        savedUser.getRole().name()
+    );
 
     return new AuthDtos.AuthResponse(
         token,
@@ -87,54 +82,35 @@ public class AuthService {
     );
   }
 
-  /**
-   * Authenticate user with username and password.
-   *
-   * @param req Login request containing username and password
-   * @return AuthResponse with JWT access token
-   * @throws InvalidCredentialsException if credentials are invalid
-   * @throws UserNotFoundException if user account is inactive or suspended
-   */
+  // ============================
+  // LOGIN
+  // ============================
   @Transactional
   public AuthDtos.AuthResponse login(AuthDtos.LoginRequest req) {
-    log.info("Login attempt for username: {}", req.username());
 
     try {
-      // Authenticate using Spring Security
-      Authentication authentication = authenticationManager.authenticate(
+      authenticationManager.authenticate(
           new UsernamePasswordAuthenticationToken(req.username(), req.password())
       );
-      authentication.isAuthenticated();
     } catch (AuthenticationException e) {
-      log.warn("Authentication failed for username: {}", req.username());
       throw new InvalidCredentialsException("Invalid username or password");
     }
 
-    // Retrieve user from database
     User user = userRepository.findByUsername(req.username())
-        .orElseThrow(() -> {
-          log.error("User not found after authentication: {}", req.username());
-          return new UserNotFoundException("User not found");
-        });
+        .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-    // Check account status
-    if (user.getStatus() == UserStatus.SUSPENDED) {
-      log.warn("Login attempt on suspended account: {}", req.username());
-      throw new UserNotFoundException("Your account has been suspended. Please contact support.");
+    if (user.getStatus() != UserStatus.ACTIVE) {
+      throw new UserNotFoundException("User is not active");
     }
 
-    if (user.getStatus() == UserStatus.INACTIVE || user.getStatus() == UserStatus.DELETED) {
-      log.warn("Login attempt on inactive/deleted account: {}", req.username());
-      throw new UserNotFoundException("Your account is not active");
-    }
-
-    // Update last login timestamp
     user.setLastLogin(Instant.now());
     userRepository.save(user);
 
-    // Generate JWT token
-    String token = jwtService.generateToken(user.getId(), user.getUsername(), user.getRole().name());
-    log.info("User logged in successfully: {}", req.username());
+    String token = jwtService.generateToken(
+        user.getId(),
+        user.getUsername(),
+        user.getRole().name()
+    );
 
     return new AuthDtos.AuthResponse(
         token,
@@ -148,116 +124,98 @@ public class AuthService {
     );
   }
 
-  /**
-   * Change user password with validation.
-   *
-   * @param userId User ID
-   * @param req Change password request with current and new passwords
-   * @throws UserNotFoundException if user not found
-   * @throws InvalidCredentialsException if current password is incorrect
-   */
+  // ============================
+  // CHANGE PASSWORD (logged in)
+  // ============================
   @Transactional
   public void changePassword(String userId, AuthDtos.ChangePasswordRequest req) {
-    log.info("Password change request for user: {}", userId);
 
-    // Validate new passwords match
     if (!req.newPassword().equals(req.confirmPassword())) {
-      throw new InvalidCredentialsException("New passwords do not match");
+      throw new InvalidCredentialsException("Passwords do not match");
     }
 
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-    // Verify current password
     if (!passwordEncoder.matches(req.currentPassword(), user.getPasswordHash())) {
-      log.warn("Invalid current password for user: {}", userId);
-      throw new InvalidCredentialsException("Current password is incorrect");
+      throw new InvalidCredentialsException("Current password incorrect");
     }
 
-    // Update password
     user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
     userRepository.save(user);
-    log.info("Password changed successfully for user: {}", userId);
   }
 
-  /**
-   * Get user profile information.
-   *
-   * @param userId User ID
-   * @return User entity
-   * @throws UserNotFoundException if user not found
-   */
-  public User getUserById(String userId) {
-    return userRepository.findById(userId)
-        .orElseThrow(() -> new UserNotFoundException("User not found"));
-  }
+  // ============================
+  // FORGOT PASSWORD
+  // ============================
+@Transactional
+public void forgotPassword(AuthDtos.ForgotPasswordRequest req) {
 
-  /**
-   * Validate token and return JWT claims.
-   *
-   * @param token JWT token
-   * @return true if token is valid
-   */
-  public boolean validateToken(String token) {
-    try {
-      jwtService.parse(token);
-      return true;
-    } catch (Exception e) {
-      log.warn("Token validation failed: {}", e.getMessage());
-      return false;
+    User user = userRepository.findByEmail(req.email())
+        .orElseThrow(() -> new UserNotFoundException("Email not found"));
+
+    // حذف أي توكن قديم
+    resetTokenRepository.deleteAllByEmail(user.getEmail());
+
+    String code = String.format("%06d", new Random().nextInt(999999));
+
+    PasswordResetToken token = PasswordResetToken.builder()
+        .email(user.getEmail()) // ✅ صحيح
+        .code(code)
+        .expiresAt(LocalDateTime.now().plusMinutes(10))
+        .used(false)
+        .build();
+
+    resetTokenRepository.save(token);
+
+   mailService.sendResetCode(user.getEmail(), code);
+
+}
+
+
+  // ============================
+  // VERIFY RESET CODE
+  // ============================
+  public void verifyResetCode(AuthDtos.VerifyResetCodeRequest req) {
+
+    PasswordResetToken token =
+        resetTokenRepository
+            .findByEmailAndCodeAndUsedFalse(req.email(), req.code())
+            .orElseThrow(() -> new InvalidCredentialsException("Invalid reset code"));
+
+    if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
+        throw new InvalidCredentialsException("Reset code expired");
     }
-  }
+}
 
-  /**
-   * Register a new admin user (for testing/initial setup).
-   * This method is intended for initial admin account creation.
-   *
-   * @param req Registration request containing username, email, password, displayName, userType
-   * @return AuthResponse with JWT access token and ADMIN role
-   * @throws UserAlreadyExistsException if username or email already exists
-   */
+
+  // ============================
+  // RESET PASSWORD
+  // ============================
   @Transactional
-  public AuthDtos.AuthResponse registerAdmin(AuthDtos.RegisterRequest req) {
-    log.info("Registering new admin user with username: {}", req.username());
+public void resetPassword(AuthDtos.ResetPasswordRequest req) {
 
-    // Validate username uniqueness
-    if (userRepository.existsByUsername(req.username())) {
-      log.warn("Admin registration failed: Username already exists: {}", req.username());
-      throw new UserAlreadyExistsException("Username '" + req.username() + "' is already taken");
+    if (!req.newPassword().equals(req.confirmPassword())) {
+        throw new InvalidCredentialsException("Passwords do not match");
     }
 
-    // Validate email uniqueness
-    if (userRepository.existsByEmail(req.email())) {
-      log.warn("Admin registration failed: Email already exists: {}", req.email());
-      throw new UserAlreadyExistsException("Email '" + req.email() + "' is already registered");
+    PasswordResetToken token =
+        resetTokenRepository
+            .findByEmailAndCodeAndUsedFalse(req.email(), req.code())
+            .orElseThrow(() -> new InvalidCredentialsException("Invalid reset code"));
+
+    if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
+        throw new InvalidCredentialsException("Reset code expired");
     }
 
-    // Create new admin user
-    User user = new User();
-    user.setUsername(req.username());
-    user.setEmail(req.email());
-    user.setDisplayName(req.displayName());
-    user.setUserType(req.userType());
-    user.setPasswordHash(passwordEncoder.encode(req.password()));
-    user.setRole(UserRole.ADMIN);
-    user.setStatus(UserStatus.ACTIVE);
-    user.setEmailVerified(false);
+    User user = userRepository.findByEmail(req.email())
+        .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-    User savedUser = userRepository.save(user);
-    log.info("Admin user registered successfully with id: {}", savedUser.getId());
+    user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+    userRepository.save(user);
 
-    // Generate JWT token
-    String token = jwtService.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getRole().name());
+    token.setUsed(true);
+    resetTokenRepository.save(token);
+}
 
-    return new AuthDtos.AuthResponse(
-        token,
-        "Bearer",
-        savedUser.getId(),
-        savedUser.getUsername(),
-        savedUser.getEmail(),
-        savedUser.getRole().name(),
-        savedUser.getStatus(),
-        savedUser.isEmailVerified()
-    );
-  }
 }

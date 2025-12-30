@@ -9,6 +9,9 @@ import jakarta.validation.constraints.Size;
 
 public class AuthDtos {
 
+  // =====================
+  // REGISTER
+  // =====================
   public record RegisterRequest(
       @NotBlank @Size(min = 3, max = 50) String username,
       @NotBlank @Email String email,
@@ -17,11 +20,17 @@ public class AuthDtos {
       @NotNull UserType userType
   ) {}
 
+  // =====================
+  // LOGIN
+  // =====================
   public record LoginRequest(
       @NotBlank String username,
       @NotBlank String password
   ) {}
 
+  // =====================
+  // AUTH RESPONSE
+  // =====================
   public record AuthResponse(
       String accessToken,
       String tokenType,
@@ -33,17 +42,49 @@ public class AuthDtos {
       boolean emailVerified
   ) {}
 
+  // =====================
+  // CHANGE PASSWORD (logged in)
+  // =====================
   public record ChangePasswordRequest(
       @NotBlank String currentPassword,
       @NotBlank @Size(min = 8, max = 80) String newPassword,
       @NotBlank @Size(min = 8, max = 80) String confirmPassword
   ) {}
 
+  // =====================
+  // REFRESH TOKEN
+  // =====================
   public record RefreshTokenRequest(
       @NotBlank String refreshToken
   ) {}
 
+  // =====================
+  // LOGOUT
+  // =====================
   public record LogoutRequest(
       String refreshToken
+  ) {}
+
+  // ==================================================
+  // 🔐 FORGOT PASSWORD FLOW (الجديد)
+  // ==================================================
+
+  // 1️⃣ إدخال الإيميل
+  public record ForgotPasswordRequest(
+      @NotBlank @Email String email
+  ) {}
+
+  // 2️⃣ التحقق من الكود
+  public record VerifyResetCodeRequest(
+      @NotBlank @Email String email,
+      @NotBlank @Size(min = 6, max = 6) String code
+  ) {}
+
+  // 3️⃣ تعيين كلمة مرور جديدة
+  public record ResetPasswordRequest(
+      @NotBlank @Email String email,
+      @NotBlank @Size(min = 6, max = 6) String code,
+      @NotBlank @Size(min = 8, max = 80) String newPassword,
+      @NotBlank @Size(min = 8, max = 80) String confirmPassword
   ) {}
 }
