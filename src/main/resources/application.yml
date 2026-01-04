@@ -55,3 +55,8 @@ app:
 logging:
   level:
     org.hibernate.SQL: debug
+
+# ✅ Google OAuth (هام)
+google:
+  oauth:
+    client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"

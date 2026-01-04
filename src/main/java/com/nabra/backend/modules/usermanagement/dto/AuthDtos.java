@@ -66,7 +66,7 @@ public class AuthDtos {
   ) {}
 
   // ==================================================
-  // 🔐 FORGOT PASSWORD FLOW (الجديد)
+  // 🔐 FORGOT PASSWORD FLOW
   // ==================================================
 
   // 1️⃣ إدخال الإيميل
@@ -86,5 +86,12 @@ public class AuthDtos {
       @NotBlank @Size(min = 6, max = 6) String code,
       @NotBlank @Size(min = 8, max = 80) String newPassword,
       @NotBlank @Size(min = 8, max = 80) String confirmPassword
+  ) {}
+
+  // ==================================================
+  // 🔐 GOOGLE AUTH (NEW)
+  // ==================================================
+  public record GoogleAuthRequest(
+      @NotBlank String idToken
   ) {}
 }

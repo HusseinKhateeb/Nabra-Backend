@@ -19,22 +19,24 @@ public class MessageController {
 
   private final MessageService messageService;
 
-  @PostMapping
-  public ResponseEntity<MessageDtos.MessageResponse> send(
-      @PathVariable String chatId,
-      @Valid @RequestBody MessageDtos.SendMessageRequest req
-  ) {
+@PostMapping
+public ResponseEntity<MessageDtos.MessageResponse> send(
+    @PathVariable("chatId") String chatId,
+    @Valid @RequestBody MessageDtos.SendMessageRequest req
+) {
     var p = SecurityUtils.currentPrincipal();
     String preferredLanguage = p.getUser().getPreferredLanguage();
-    return ResponseEntity.ok(messageService.send(p.getUserId(), chatId, req, preferredLanguage));
-  }
+    return ResponseEntity.ok(
+        messageService.send(p.getUserId(), chatId, req, preferredLanguage)
+    );
+}
 
-  @GetMapping
-  public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
-      @PathVariable String chatId,
-      Pageable pageable
-  ) {
+@GetMapping
+public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
+    @PathVariable("chatId") String chatId, // ✅
+    Pageable pageable
+) {
     var p = SecurityUtils.currentPrincipal();
     return ResponseEntity.ok(messageService.list(p.getUserId(), chatId, pageable));
-  }
+}
 }

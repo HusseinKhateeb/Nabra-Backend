@@ -91,4 +91,14 @@ public class AuthController {
     authService.resetPassword(req);
     return ResponseEntity.ok().build();
   }
+  // ============================
+// GOOGLE AUTH
+// ============================
+@PostMapping("/google")
+public ResponseEntity<AuthDtos.AuthResponse> googleAuth(
+    @Valid @RequestBody AuthDtos.GoogleAuthRequest req
+) {
+    return ResponseEntity.ok(authService.googleAuth(req));
+}
+
 }

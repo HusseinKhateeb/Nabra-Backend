@@ -77,6 +77,8 @@ public class SecurityConfig {
                 "/v3/api-docs/**",
                 "/swagger-ui/**",
                 "/swagger-ui.html",
+                "/api/v1/auth/google",
+
                 "/actuator/health/**"
             ).permitAll()
 
