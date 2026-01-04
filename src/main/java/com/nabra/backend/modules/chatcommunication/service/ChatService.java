@@ -1,8 +1,11 @@
 package com.nabra.backend.modules.chatcommunication.service;
 
+import com.nabra.backend.common.model.Enums.DeliveryStatus;
 import com.nabra.backend.modules.chatcommunication.dto.ChatDtos;
 import com.nabra.backend.modules.chatcommunication.model.Chat;
+import com.nabra.backend.modules.chatcommunication.model.Message;
 import com.nabra.backend.modules.chatcommunication.repository.ChatRepository;
+import com.nabra.backend.modules.chatcommunication.repository.MessageRepository;
 import com.nabra.backend.modules.usermanagement.model.User;
 import com.nabra.backend.modules.usermanagement.service.UserService;
 import jakarta.transaction.Transactional;
@@ -20,24 +23,56 @@ import java.util.stream.Collectors;
 public class ChatService {
 
   private final ChatRepository chatRepository;
+  private final MessageRepository messageRepository; // ✅ مهم
   private final UserService userService;
 
-  public ChatDtos.ChatResponse toDto(Chat c) {
-    Set<String> pIds =
-        c.getParticipants().stream().map(User::getId).collect(Collectors.toSet());
+  /* =======================
+     Mapping
+     ======================= */
+  public ChatDtos.ChatResponse toDto(Chat c, String currentUserId) {
+
+    Set<ChatDtos.ChatParticipantDto> participants =
+        c.getParticipants().stream()
+            .map(u -> new ChatDtos.ChatParticipantDto(
+                u.getId(),
+                u.getDisplayName(),
+                u.getAvatarUrl()
+            ))
+            .collect(Collectors.toSet());
+
+    Message lastMessage = messageRepository
+        .findTopByChatIdOrderBySentAtDesc(c.getId())
+        .orElse(null);
+
+    String lastMessageText =
+        lastMessage != null ? lastMessage.getTextContent() : "";
+
+    long unreadCount = messageRepository
+        .countByChatIdAndSenderIdNotAndDeliveryStatus(
+            c.getId(),
+            currentUserId,
+            DeliveryStatus.SENT
+        );
 
     return new ChatDtos.ChatResponse(
         c.getId(),
         c.isGroupChat(),
         c.getTitle(),
-        pIds,
-        c.getLastMessageAt()
+        participants,
+        c.getLastMessageAt(),
+        lastMessageText,
+        unreadCount
     );
   }
 
-  // ✅ التعديل الأهم هنا
+  /* =======================
+     Create chat
+     ======================= */
   @Transactional
-  public ChatDtos.ChatResponse create(String creatorUserId, ChatDtos.CreateChatRequest req) {
+  public ChatDtos.ChatResponse create(
+      String creatorUserId,
+      ChatDtos.CreateChatRequest req
+  ) {
 
     if (req.participantUserIds() == null || req.participantUserIds().isEmpty()) {
       throw new IllegalArgumentException("participantUserIds is required");
@@ -46,7 +81,6 @@ public class ChatService {
     Set<String> ids = new HashSet<>(req.participantUserIds());
     ids.add(creatorUserId);
 
-    // ❌ منع محادثة مع النفس
     if (!Boolean.TRUE.equals(req.groupChat()) && ids.size() < 2) {
       throw new IllegalArgumentException("Private chat must have 2 participants");
     }
@@ -61,12 +95,14 @@ public class ChatService {
 
     chat.setParticipants(participants);
 
-    // ✅ مهم جدًا: saveAndFlush
     chatRepository.saveAndFlush(chat);
 
-    return toDto(chat);
+    return toDto(chat, creatorUserId);
   }
 
+  /* =======================
+     Get / List
+     ======================= */
   public Chat getChat(String chatId) {
     return chatRepository.findById(chatId)
         .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
@@ -78,13 +114,16 @@ public class ChatService {
         .anyMatch(u -> u.getId().equals(userId));
   }
 
-  public Page<ChatDtos.ChatResponse> listForUser(String userId, Pageable pageable) {
+  public Page<ChatDtos.ChatResponse> listForUser(
+      String userId,
+      Pageable pageable
+  ) {
     return chatRepository
         .findByParticipantsIdOrderByLastMessageAtDesc(userId, pageable)
-        .map(this::toDto);
+        .map(chat -> toDto(chat, userId)); // ✅ مهم جدًا
   }
 
-  // يُستخدم في MessageService
+  // يُستخدم من MessageService
   public void save(Chat chat) {
     chatRepository.save(chat);
   }

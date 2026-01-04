@@ -6,13 +6,21 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
-
+import java.util.Optional;
 import java.util.List;
 
 public interface MessageRepository extends JpaRepository<Message, String> {
 
   Page<Message> findByChatIdOrderBySentAtDesc(String chatId, Pageable pageable);
+  // ✅ آخر رسالة في الشات
+  Optional<Message> findTopByChatIdOrderBySentAtDesc(String chatId);
 
+  // ✅ عدد الرسائل غير المقروءة
+  long countByChatIdAndSenderIdNotAndDeliveryStatus(
+      String chatId,
+      String senderId,
+      DeliveryStatus deliveryStatus
+  );
   @Query("""
       select m.id from Message m
       where m.chat.id = :chatId
@@ -31,4 +39,5 @@ public interface MessageRepository extends JpaRepository<Message, String> {
       """)
   int bulkUpdateStatus(@Param("ids") List<String> ids,
                        @Param("newStatus") DeliveryStatus newStatus);
+                       
 }

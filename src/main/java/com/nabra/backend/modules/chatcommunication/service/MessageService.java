@@ -26,9 +26,6 @@ public class MessageService {
   private final UserService userService;
   private final VoiceToTextService voiceToTextService;
 
-  /* =======================
-     Mapping
-     ======================= */
   public MessageDtos.MessageResponse toDto(Message m) {
     return new MessageDtos.MessageResponse(
         m.getId(),
@@ -43,9 +40,6 @@ public class MessageService {
     );
   }
 
-  /* =======================
-     Send message (FIXED)
-     ======================= */
   @Transactional
   public MessageDtos.MessageResponse send(
       String senderId,
@@ -69,32 +63,27 @@ public class MessageService {
     m.setMediaUrl(req.mediaUrl());
     m.setDeliveryStatus(DeliveryStatus.SENT);
 
-    // Voice-to-text
     if (req.type() == MessageType.VOICE) {
       String transcript = req.voiceTranscript();
       if ((transcript == null || transcript.isBlank())
           && req.mediaUrl() != null
           && !req.mediaUrl().isBlank()) {
-        transcript = voiceToTextService.transcribe(req.mediaUrl(), preferredLanguage);
+        transcript =
+            voiceToTextService.transcribe(req.mediaUrl(), preferredLanguage);
       }
       m.setVoiceTranscript(transcript);
     } else {
       m.setVoiceTranscript(req.voiceTranscript());
     }
 
-    // ✅ احفظ الرسالة فورًا
     Message saved = messageRepository.saveAndFlush(m);
 
-    // ✅ حدّث الشات واحفظه
     chat.setLastMessageAt(saved.getSentAt());
     chatService.save(chat);
 
     return toDto(saved);
   }
 
-  /* =======================
-     List messages
-     ======================= */
   public Page<MessageDtos.MessageResponse> list(
       String userId,
       String chatId,
@@ -111,9 +100,6 @@ public class MessageService {
         .map(this::toDto);
   }
 
-  /* =======================
-     DELIVERED
-     ======================= */
   @Transactional
   public List<String> markDelivered(String userId, String chatId) {
     Chat chat = chatService.getChat(chatId);
@@ -134,11 +120,12 @@ public class MessageService {
     return ids;
   }
 
-  /* =======================
-     READ / SEEN
-     ======================= */
   @Transactional
-  public List<String> markRead(String userId, String chatId, List<String> messageIds) {
+  public List<String> markRead(
+      String userId,
+      String chatId,
+      List<String> messageIds
+  ) {
     if (messageIds == null || messageIds.isEmpty()) {
       return Collections.emptyList();
     }
