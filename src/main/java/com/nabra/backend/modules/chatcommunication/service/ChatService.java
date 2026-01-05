@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 public class ChatService {
 
   private final ChatRepository chatRepository;
-  private final MessageRepository messageRepository; // ✅ مهم
+  private final MessageRepository messageRepository;
   private final UserService userService;
 
   /* =======================
@@ -47,12 +47,10 @@ public class ChatService {
     String lastMessageText =
         lastMessage != null ? lastMessage.getTextContent() : "";
 
-    long unreadCount = messageRepository
-        .countByChatIdAndSenderIdNotAndDeliveryStatus(
-            c.getId(),
-            currentUserId,
-            DeliveryStatus.SENT
-        );
+    long unreadCount = messageRepository.countUnreadMessages(
+        c.getId(),
+        currentUserId
+    );
 
     return new ChatDtos.ChatResponse(
         c.getId(),
@@ -120,7 +118,7 @@ public class ChatService {
   ) {
     return chatRepository
         .findByParticipantsIdOrderByLastMessageAtDesc(userId, pageable)
-        .map(chat -> toDto(chat, userId)); // ✅ مهم جدًا
+        .map(chat -> toDto(chat, userId));
   }
 
   // يُستخدم من MessageService

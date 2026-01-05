@@ -33,10 +33,18 @@ public ResponseEntity<MessageDtos.MessageResponse> send(
 
 @GetMapping
 public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
-    @PathVariable("chatId") String chatId, // ✅
+    @PathVariable("chatId") String chatId,
     Pageable pageable
 ) {
     var p = SecurityUtils.currentPrincipal();
-    return ResponseEntity.ok(messageService.list(p.getUserId(), chatId, pageable));
+
+    // ✅ الحل النهائي
+    messageService.markAllAsRead(p.getUserId(), chatId);
+
+    return ResponseEntity.ok(
+        messageService.list(p.getUserId(), chatId, pageable)
+    );
 }
+
+
 }

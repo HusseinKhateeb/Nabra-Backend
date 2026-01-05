@@ -26,6 +26,7 @@ public class MessageService {
   private final UserService userService;
   private final VoiceToTextService voiceToTextService;
 
+  // ================= Mapping =================
   public MessageDtos.MessageResponse toDto(Message m) {
     return new MessageDtos.MessageResponse(
         m.getId(),
@@ -40,6 +41,7 @@ public class MessageService {
     );
   }
 
+  // ================= Send =================
   @Transactional
   public MessageDtos.MessageResponse send(
       String senderId,
@@ -84,6 +86,7 @@ public class MessageService {
     return toDto(saved);
   }
 
+  // ================= List =================
   public Page<MessageDtos.MessageResponse> list(
       String userId,
       String chatId,
@@ -100,6 +103,7 @@ public class MessageService {
         .map(this::toDto);
   }
 
+  // ================= Delivered =================
   @Transactional
   public List<String> markDelivered(String userId, String chatId) {
     Chat chat = chatService.getChat(chatId);
@@ -108,11 +112,7 @@ public class MessageService {
       throw new IllegalArgumentException("Not a participant in this chat");
     }
 
-    List<String> ids = messageRepository.findIdsToUpdateStatus(
-        chatId,
-        userId,
-        DeliveryStatus.SENT
-    );
+    List<String> ids = messageRepository.findAllUnreadIds(chatId, userId);
 
     if (ids.isEmpty()) return Collections.emptyList();
 
@@ -120,6 +120,7 @@ public class MessageService {
     return ids;
   }
 
+  // ================= Read (specific IDs) =================
   @Transactional
   public List<String> markRead(
       String userId,
@@ -138,5 +139,22 @@ public class MessageService {
 
     messageRepository.bulkUpdateStatus(messageIds, DeliveryStatus.READ);
     return messageIds;
+  }
+
+  // ================= Read ALL (🔥 الحل الأساسي) =================
+  @Transactional
+  public void markAllAsRead(String userId, String chatId) {
+    Chat chat = chatService.getChat(chatId);
+
+    if (!chatService.isParticipant(chat, userId)) {
+      throw new IllegalArgumentException("Not a participant in this chat");
+    }
+
+    List<String> ids =
+        messageRepository.findAllUnreadIds(chatId, userId);
+
+    if (!ids.isEmpty()) {
+      messageRepository.bulkUpdateStatus(ids, DeliveryStatus.READ);
+    }
   }
 }
