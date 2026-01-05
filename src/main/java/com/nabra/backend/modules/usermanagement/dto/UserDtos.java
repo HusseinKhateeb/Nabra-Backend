@@ -11,6 +11,13 @@ import java.time.Instant;
 
 public class UserDtos {
 
+  /** 🔹 DTO بسيط لقائمة المستخدمين (للشات) */
+  public record UserListItem(
+      String id,
+      String displayName,
+      String avatarUrl
+  ) {}
+
   /** Statistics for user profile */
   public record UserStatistics(
       long transfers,

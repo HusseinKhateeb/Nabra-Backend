@@ -81,16 +81,17 @@ public class User extends BaseEntity {
   private String phoneNumber;
 
   /** Total number of transfers */
-  @Column
+    @Column(nullable = false)
   private long totalTransfers = 0;
 
   /** Total hours of platform usage */
-  @Column
+  @Column(nullable = false)
   private double hoursOfUse = 0.0;
 
   /** Accuracy percentage (0-100) */
-  @Column
-  private double accuracy = 0.0;
+
+  @Column(nullable = false)
+  private Double accuracy = 0.0;
 
   /**
    * Blocking relation: if A blocks B, then B should not be able to message A.
