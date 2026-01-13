@@ -14,6 +14,35 @@ spring:
   jackson:
     time-zone: UTC
 
+<<<<<<< Updated upstream
+=======
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: odehteam935@gmail.com
+    password: towdnaeenrkzeuhi
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  # ✅ مهم لتشغيل الملفات (فيديوهات) من المسار الفعلي
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - file:C:/nabra/uploads/
+
+  # ✅ إعدادات رفع الملفات
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 200MB
+      max-request-size: 200MB
+
+>>>>>>> Stashed changes
 server:
   port: 8080
 
@@ -32,7 +61,18 @@ app:
     stt:
       baseUrl: ""
 
+  # ✅ المسار الحقيقي لحفظ الفيديوهات
+  upload:
+    video-path: C:/nabra/uploads/videos/
+
 logging:
   level:
     org.hibernate.SQL: debug
 
+<<<<<<< Updated upstream
+=======
+# ✅ Google OAuth
+google:
+  oauth:
+    client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
+>>>>>>> Stashed changes

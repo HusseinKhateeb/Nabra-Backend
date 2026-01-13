@@ -14,6 +14,12 @@ public class UserPrincipal implements UserDetails {
 
   private final User user;
 
+  // ✅ المهم جدًا – هذا اللي نستخدمه بكل المشروع
+  public String getId() {
+    return user.getId();
+  }
+
+  // (اختياري) لو حاب تتركه
   public String getUserId() {
     return user.getId();
   }
@@ -24,7 +30,9 @@ public class UserPrincipal implements UserDetails {
 
   @Override
   public Collection<? extends GrantedAuthority> getAuthorities() {
-    return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    return List.of(
+        new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
+    );
   }
 
   @Override
