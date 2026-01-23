@@ -1,11 +1,18 @@
 package com.nabra.backend.modules.usermanagement.service;
 
 import com.nabra.backend.modules.usermanagement.dto.UserDtos;
+import com.nabra.backend.modules.usermanagement.exception.UserNotFoundException;
 import com.nabra.backend.modules.usermanagement.model.User;
 import com.nabra.backend.modules.usermanagement.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
+/**
+ * Service for user profile and user management operations.
+ */
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -13,26 +20,56 @@ public class UserService {
   private final UserRepository userRepository;
 
   public User getById(String userId) {
-    return userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
+    return userRepository.findById(userId)
+        .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
+  }
+
+  /** ✅ جديد: جلب كل المستخدمين */
+  public List<User> findAll() {
+    return userRepository.findAll();
   }
 
   public UserDtos.UserProfileResponse toProfile(User u) {
+    UserDtos.UserStatistics statistics = new UserDtos.UserStatistics(
+        u.getTotalTransfers(),
+        u.getHoursOfUse(),
+        u.getAccuracy()
+    );
+
     return new UserDtos.UserProfileResponse(
-        u.getId(), u.getUsername(), u.getEmail(), u.getDisplayName(), u.getGender(), u.getAge(), u.getAvatarUrl(),
-        u.getRole(), u.getUserType(), u.getPreferredLanguage(), u.isHighContrastEnabled(), u.getFontScale(), u.isVibrationEnabled()
+        u.getId(),
+        u.getUsername(),
+        u.getDisplayName(),
+        u.getEmail(),
+        u.getPhoneNumber(),
+        u.getCreatedAt(),
+        u.getRole(),
+        u.getStatus(),
+        u.getUserType(),
+        u.getGender(),
+        u.getAge(),
+        u.getAvatarUrl(),
+        u.isHighContrastEnabled(),
+        u.getFontScale(),
+        u.isVibrationEnabled(),
+        u.isEmailVerified(),
+        statistics
     );
   }
 
+  @Transactional
   public UserDtos.UserProfileResponse updateProfile(String userId, UserDtos.UpdateProfileRequest req) {
     User u = getById(userId);
+
     if (req.displayName() != null) u.setDisplayName(req.displayName());
     if (req.gender() != null) u.setGender(req.gender());
     if (req.age() != null) u.setAge(req.age());
     if (req.avatarUrl() != null) u.setAvatarUrl(req.avatarUrl());
-    if (req.preferredLanguage() != null) u.setPreferredLanguage(req.preferredLanguage());
+    if (req.phoneNumber() != null) u.setPhoneNumber(req.phoneNumber());
     if (req.highContrastEnabled() != null) u.setHighContrastEnabled(req.highContrastEnabled());
     if (req.fontScale() != null) u.setFontScale(req.fontScale());
     if (req.vibrationEnabled() != null) u.setVibrationEnabled(req.vibrationEnabled());
+
     userRepository.save(u);
     return toProfile(u);
   }

@@ -25,6 +25,10 @@ public class Chat extends BaseEntity {
   @Column(length = 120)
   private String title;
 
+  // ✅ هذا الحقل كان ناقص
+  @Column
+  private Instant lastMessageAt;
+
   @ManyToMany
   @JoinTable(
       name = "chat_participants",
@@ -32,6 +36,4 @@ public class Chat extends BaseEntity {
       inverseJoinColumns = @JoinColumn(name = "user_id")
   )
   private Set<User> participants = new HashSet<>();
-
-  private Instant lastMessageAt;
 }

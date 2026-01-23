@@ -24,8 +24,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final DbUserDetailsService userDetailsService;
 
   @Override
-  protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-      throws ServletException, IOException {
+  protected void doFilterInternal(
+      HttpServletRequest request,
+      HttpServletResponse response,
+      FilterChain filterChain
+  ) throws ServletException, IOException {
 
     String header = request.getHeader("Authorization");
     if (header == null || !header.startsWith("Bearer ")) {
@@ -34,20 +37,35 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     String token = header.substring(7);
+
     try {
       Jws<Claims> jws = jwtService.parse(token);
       String userId = jws.getBody().getSubject();
 
-      if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+      if (userId != null &&
+          SecurityContextHolder.getContext().getAuthentication() == null) {
+
         var principal = userDetailsService.loadById(userId);
-        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        var auth = new UsernamePasswordAuthenticationToken(
+            principal,
+            null,
+            principal.getAuthorities()
+        );
+        auth.setDetails(
+            new WebAuthenticationDetailsSource().buildDetails(request)
+        );
         SecurityContextHolder.getContext().setAuthentication(auth);
       }
-    } catch (Exception ex) {
-      // Invalid token -> proceed without auth; endpoint security will reject if required.
+    } catch (Exception ignored) {
+      // Token invalid → endpoint نفسه يقرر
     }
 
     filterChain.doFilter(request, response);
+  }
+
+  // ❗ تجاهل auth endpoints
+  @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return request.getServletPath().startsWith("/api/v1/auth/");
   }
 }

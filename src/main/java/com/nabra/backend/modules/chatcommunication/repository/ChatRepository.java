@@ -7,4 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ChatRepository extends JpaRepository<Chat, String> {
   Page<Chat> findByParticipantsIdOrderByLastMessageAtDesc(String userId, Pageable pageable);
+  
 }
