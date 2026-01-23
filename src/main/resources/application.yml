@@ -14,8 +14,8 @@ spring:
   jackson:
     time-zone: UTC
 
-<<<<<<< Updated upstream
-=======
+
+
   mail:
     host: smtp.gmail.com
     port: 587
@@ -42,7 +42,7 @@ spring:
       max-file-size: 200MB
       max-request-size: 200MB
 
->>>>>>> Stashed changes
+
 server:
   port: 8080
 
@@ -69,10 +69,9 @@ logging:
   level:
     org.hibernate.SQL: debug
 
-<<<<<<< Updated upstream
-=======
+
 # ✅ Google OAuth
 google:
   oauth:
     client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
->>>>>>> Stashed changes
+
