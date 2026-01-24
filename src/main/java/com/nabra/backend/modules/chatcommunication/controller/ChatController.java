@@ -20,14 +20,20 @@ public class ChatController {
   private final ChatService chatService;
 
   @PostMapping
-  public ResponseEntity<ChatDtos.ChatResponse> create(@Valid @RequestBody ChatDtos.CreateChatRequest req) {
+  public ResponseEntity<ChatDtos.ChatResponse> create(
+      @Valid @RequestBody ChatDtos.CreateChatRequest req
+  ) {
     var p = SecurityUtils.currentPrincipal();
-    return ResponseEntity.ok(chatService.create(p.getUserId(), req));
+    return ResponseEntity.ok(
+        chatService.create(p.getUserId(), req)
+    );
   }
 
   @GetMapping
   public ResponseEntity<Page<ChatDtos.ChatResponse>> list(Pageable pageable) {
     var p = SecurityUtils.currentPrincipal();
-    return ResponseEntity.ok(chatService.listForUser(p.getUserId(), pageable));
+    return ResponseEntity.ok(
+        chatService.listForUser(p.getUserId(), pageable)
+    );
   }
 }
