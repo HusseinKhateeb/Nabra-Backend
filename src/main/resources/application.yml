@@ -42,6 +42,7 @@ spring:
       enabled: true
       max-file-size: 200MB
       max-request-size: 200MB
+
 server:
   port: 8080
 
@@ -73,16 +74,8 @@ logging:
   level:
     org.hibernate.SQL: debug
 
-<<<<<<< HEAD
-
-# ✅ Google OAuth
-google:
-  oauth:
-    client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
-
-=======
 # ✅ Google OAuth (هام)
 google:
   oauth:
     client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
->>>>>>> feature/authentication-system
+
