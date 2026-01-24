@@ -49,4 +49,35 @@ public class UserController {
         ))
         .collect(Collectors.toList());
   }
+
+  // ============================
+  // 📋 PROFILE ENDPOINTS
+  // ============================
+
+  /** Get current user profile with statistics from DB */
+  @GetMapping("/profile")
+  public ResponseEntity<UserDtos.UserProfileResponse> getProfile() {
+    String userId = SecurityUtils.currentPrincipal().getUserId();
+    return ResponseEntity.ok(userService.getProfile(userId));
+  }
+
+  // ============================
+  // ⚙️ SETTINGS ENDPOINTS
+  // ============================
+
+  /** Get current user settings */
+  @GetMapping("/settings")
+  public ResponseEntity<UserDtos.UserSettingsResponse> getSettings() {
+    String userId = SecurityUtils.currentPrincipal().getUserId();
+    return ResponseEntity.ok(userService.getSettings(userId));
+  }
+
+  /** Update current user settings */
+  @PutMapping("/settings")
+  public ResponseEntity<UserDtos.UserSettingsResponse> updateSettings(
+      @Valid @RequestBody UserDtos.UpdateSettingsRequest req
+  ) {
+    String userId = SecurityUtils.currentPrincipal().getUserId();
+    return ResponseEntity.ok(userService.updateSettings(userId, req));
+  }
 }
