@@ -1,6 +1,8 @@
 import argparse
 import importlib
 import os
+import re
+import sys
 import time
 from pathlib import Path
 
@@ -169,6 +171,16 @@ def remove_arabic_diacritics(text: str) -> str:
     return text.translate({ord(ch): None for ch in diacritics_and_marks})
 
 
+def clean_recognized_text(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = " ".join(text.strip().split())
+    cleaned = cleaned.lstrip("/\\|_*-:;.,!؟،[]{}()\"'`")
+    cleaned = re.sub(r"[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF0-9\s]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
 def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -> None:
     try:
         sd = importlib.import_module("sounddevice")
@@ -207,7 +219,7 @@ def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -
 
                 waveform = torch.from_numpy(recording.T)
                 raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
-                arabic_text = remove_arabic_diacritics(buckwalter_to_arabic(raw_text))
+                arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
 
                 with output_file.open("a", encoding="utf-8") as f:
                     f.write(arabic_text + "\n")
@@ -217,6 +229,96 @@ def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -
                 print(f"Saved Arabic transcription to: {output_file}")
 
         time.sleep(0.03)
+
+
+def run_mic_once(model_id: str, output_file: Path, duration: float = 2.0, device_id=None) -> str:
+    try:
+        sd = importlib.import_module("sounddevice")
+    except Exception as exc:
+        raise ImportError("Mic-once mode needs sounddevice. Install with: pip install sounddevice") from exc
+
+    sample_rate = 16000
+
+    # Use specific device or default
+    if device_id is not None:
+        device_info = sd.query_devices(device_id)
+        print(f"Using microphone: {device_info['name']}")
+    
+    print(f"Recording {duration:g} seconds...")
+    recording = sd.rec(
+        int(duration * sample_rate),
+        samplerate=sample_rate,
+        channels=1,
+        dtype="float32",
+        device=device_id,
+    )
+    sd.wait()
+
+    processor, model, device = load_asr(model_id)
+
+    waveform = torch.from_numpy(recording.T)
+    raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
+    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+
+    with output_file.open("w", encoding="utf-8") as f:
+        f.write(arabic_text + "\n")
+
+    print("ASR (raw):", raw_text)
+    print("ASR (Arabic):", arabic_text)
+    print(f"Saved Arabic transcription to: {output_file}")
+    return arabic_text
+
+
+def run_mic_service(model_id: str, duration: float = 2.0, device_id=None) -> None:
+    try:
+        sd = importlib.import_module("sounddevice")
+    except Exception as exc:
+        raise ImportError("Mic service mode needs sounddevice. Install with: pip install sounddevice") from exc
+
+    sample_rate = 16000
+    processor, model, device = load_asr(model_id)
+
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            break
+
+        parts = line.rstrip("\n").split("\t", 2)
+        command = parts[0].strip().upper() if parts else ""
+
+        if command == "QUIT":
+            break
+
+        if command != "REC":
+            continue
+
+        req_duration = duration
+        if len(parts) > 1 and parts[1]:
+            try:
+                req_duration = float(parts[1])
+            except Exception:
+                req_duration = duration
+
+        output_file = Path("realtime_result.txt")
+        if len(parts) > 2 and parts[2]:
+            output_file = Path(parts[2])
+
+        recording = sd.rec(
+            int(req_duration * sample_rate),
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            device=device_id,
+        )
+        sd.wait()
+
+        waveform = torch.from_numpy(recording.T)
+        raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
+        arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with output_file.open("w", encoding="utf-8") as f:
+            f.write(arabic_text + "\n")
 
 
 def main() -> None:
@@ -248,7 +350,31 @@ def main() -> None:
         default="realtime_result.txt",
         help="Output txt file in realtime mode (default: realtime_result.txt)",
     )
+    parser.add_argument(
+        "--mic-once",
+        action="store_true",
+        help="Record one clip from mic and transcribe once (non-interactive)",
+    )
+    parser.add_argument(
+        "--device",
+        type=int,
+        default=None,
+        help="Audio device ID (use 3 for Realtek mic to bypass SteelSeries, None for default)",
+    )
+    parser.add_argument(
+        "--mic-service",
+        action="store_true",
+        help="Persistent mic service mode (reads REC/QUIT commands from stdin)",
+    )
     args = parser.parse_args()
+
+    if args.mic_service:
+        run_mic_service(args.model, args.duration, device_id=args.device)
+        return
+
+    if args.mic_once:
+        run_mic_once(args.model, Path(args.output), args.duration, device_id=args.device)
+        return
 
     if args.realtime:
         run_realtime_mode(args.model, Path(args.output), args.duration)
@@ -259,7 +385,7 @@ def main() -> None:
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
     text = transcribe(str(audio_file), args.model)
-    arabic_text = remove_arabic_diacritics(buckwalter_to_arabic(text))
+    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(text)))
 
     output_file = audio_file.with_suffix(".txt")
     output_file.write_text(arabic_text + "\n", encoding="utf-8")
