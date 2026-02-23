@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -136,7 +137,9 @@ def start_audio_asr_subprocess(duration: float = 2.0, device_id=None):
     audio_model_dir = script_dir.parent / "audio model"
     audio_venv_python = audio_model_dir / ".venv" / "Scripts" / "python.exe"
     audio_script = audio_model_dir / "test_asr_ctc.py"
-    result_file = audio_model_dir / f"realtime_result_{int(time.time() * 1000)}.txt"
+    temp_dir = Path(tempfile.gettempdir()) / "nabra_avsr"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    result_file = temp_dir / f"realtime_result_{int(time.time() * 1000)}.txt"
     
     # Check paths exist
     if not audio_venv_python.exists():
@@ -195,9 +198,9 @@ def trigger_audio_asr_recording(process, duration: float = 2.0) -> Optional[Path
     if process is None or process.poll() is not None or process.stdin is None:
         return None
 
-    script_dir = Path(__file__).parent
-    audio_model_dir = script_dir.parent / "audio model"
-    result_file = audio_model_dir / f"realtime_result_{int(time.time() * 1000)}.txt"
+    temp_dir = Path(tempfile.gettempdir()) / "nabra_avsr"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    result_file = temp_dir / f"realtime_result_{int(time.time() * 1000)}.txt"
 
     try:
         process.stdin.write(f"REC\t{duration}\t{result_file}\n")
@@ -215,27 +218,34 @@ def wait_audio_asr_result(process, result_file: Path, timeout: float = 10.0) -> 
         print("[WARNING] Audio process is None, skipping audio")
         return ""
     
-    start_time = time.time()
-    while (time.time() - start_time) < timeout:
-        if process.poll() is not None:
-            print(f"[ERROR] Audio service stopped unexpectedly (code={process.returncode})")
-            return ""
+    try:
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            if process.poll() is not None:
+                print(f"[ERROR] Audio service stopped unexpectedly (code={process.returncode})")
+                return ""
 
-        if result_file.exists():
-            try:
-                lines = [line.strip() for line in result_file.read_text(encoding='utf-8').splitlines()]
-                non_empty_lines = [line for line in lines if line]
-                audio_text = non_empty_lines[-1] if non_empty_lines else ""
-                if audio_text:
-                    print(f"[OK] Audio ASR: {audio_text}")
-                    return audio_text
-            except Exception:
-                pass
+            if result_file.exists():
+                try:
+                    lines = [line.strip() for line in result_file.read_text(encoding='utf-8').splitlines()]
+                    non_empty_lines = [line for line in lines if line]
+                    audio_text = non_empty_lines[-1] if non_empty_lines else ""
+                    if audio_text:
+                        print(f"[OK] Audio ASR: {audio_text}")
+                        return audio_text
+                except Exception:
+                    pass
 
-        time.sleep(0.05)
+            time.sleep(0.05)
 
-    print(f"[WARNING] Audio ASR timeout after {timeout}s")
-    return ""
+        print(f"[WARNING] Audio ASR timeout after {timeout}s")
+        return ""
+    finally:
+        try:
+            if result_file.exists():
+                result_file.unlink()
+        except Exception:
+            pass
 
 
 def stop_audio_asr_service(process) -> None:
