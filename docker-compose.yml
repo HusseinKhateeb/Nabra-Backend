@@ -4,8 +4,8 @@ services:
     container_name: nabra-postgres
     environment:
       POSTGRES_DB: nabra
-      POSTGRES_USER: nabra
-      POSTGRES_PASSWORD: nabra
+      POSTGRES_USER: postgres.sdkejfgdqrovweyustoh
+      POSTGRES_PASSWORD: Zqdg5r1Yuax9XJZY
     ports:
       - "5432:5432"
     volumes:

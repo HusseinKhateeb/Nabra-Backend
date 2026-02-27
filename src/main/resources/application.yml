@@ -2,9 +2,9 @@ spring:
   application:
     name: nabra-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/nabra
-    username: nabra
-    password: nabra
+    url: jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres
+    username: postgres.sdkejfgdqrovweyustoh
+    password: Zqdg5r1Yuax9XJZY
   jpa:
     hibernate:
       ddl-auto: update  # for scaffold/dev; use migrations in production
