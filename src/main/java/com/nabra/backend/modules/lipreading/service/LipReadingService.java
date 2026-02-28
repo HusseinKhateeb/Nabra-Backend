@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nabra.backend.modules.lipreading.dto.LipReadingDtos;
+
+import java.nio.file.Path;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -60,6 +62,26 @@ public class LipReadingService {
         .retrieve()
         .body(LipReadingDtos.LipReadingResponse.class);
   }
+
+  public String runAvsrUnified(Path audioPath, Path videoPath) {
+    // Ensure commands are configured
+    if (!StringUtils.hasText(lipCommand) || !StringUtils.hasText(audioCommand)) {
+        throw new IllegalArgumentException("AVSR commands are not configured (app.ai.avsr.lip.command, app.ai.avsr.audio.command)");
+    }
+
+    // Build command for AVSR fusion (example, adapt as needed)
+    String command = String.format("%s --audio %s --video %s",
+            pythonCommand,
+            quoteIfNeeded(audioPath.toAbsolutePath().toString()),
+            quoteIfNeeded(videoPath.toAbsolutePath().toString())
+    );
+
+    // Run the command and capture output
+    String output = runCommand(command, "AVSR fusion failed");
+
+    // TODO: Parse output as needed. For now, return raw output.
+    return output;
+}
 
   public LipReadingDtos.AvsrFusionResponse fuse(LipReadingDtos.AvsrFusionRequest req) {
     int topK = req.topK() == null || req.topK() < 1 ? defaultTopK : req.topK();

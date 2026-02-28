@@ -2,9 +2,9 @@ spring:
   application:
     name: nabra-backend
   datasource:
-    url: jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres
-    username: postgres.sdkejfgdqrovweyustoh
-    password: Zqdg5r1Yuax9XJZY
+    url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
+    # username: postgres
+    # password: WKAB8lzpixs8i4SL
   jpa:
     hibernate:
       ddl-auto: update  # for scaffold/dev; use migrations in production
@@ -13,6 +13,10 @@ spring:
         format_sql: true
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
 
 server:
   port: 8080
@@ -42,7 +46,7 @@ app:
       topK: 5
       timeoutSeconds: 60
 
-logging:
-  level:
-    org.hibernate.SQL: debug
-
+lip:
+  command: '"../../.venv-win/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+audio:
+  command: '"../../.venv/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
