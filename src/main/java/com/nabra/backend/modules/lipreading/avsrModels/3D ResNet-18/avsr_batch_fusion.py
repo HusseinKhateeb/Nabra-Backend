@@ -9,6 +9,7 @@ import sys
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
+import logging
 import sys
 import json
 from pathlib import Path
@@ -17,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import cv2
+import subprocess
 
 # --- Configurable paths ---
 CHECKPOINT_PATH = 'checkpoints/best_model_acc_82.59.pth'
@@ -113,21 +115,21 @@ def predict_lip(model, frames, device, idx_to_word, top_k=5):
     return idx_to_word[idx.item()], conf.item(), top_predictions
 
 def run_asr(audio_path):
-    import subprocess
-    cmd = [
-        ASR_VENV_PYTHON,
-        ASR_SCRIPT_PATH,
-        "--file",
-        str(audio_path)
-    ]
+    logging.basicConfig(filename='avsr_batch_fusion.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+    logging.debug(f"ASR audio_path: {audio_path}")
+    logging.debug(f"ASR script path: {ASR_SCRIPT_PATH}")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        lines = result.stdout.splitlines()
-        for line in reversed(lines):
-            if line.strip():
-                return line.strip()
-        return ""
-    except Exception:
+        result = subprocess.run([
+            ASR_VENV_PYTHON,
+            ASR_SCRIPT_PATH,
+            str(audio_path)
+        ], capture_output=True, text=True, timeout=30)
+        logging.debug(f"ASR stdout: {result.stdout}")
+        logging.debug(f"ASR stderr: {result.stderr}")
+        logging.debug(f"ASR returncode: {result.returncode}")
+        return result.stdout.strip()
+    except Exception as e:
+        logging.error(f"ASR subprocess error: {e}")
         return ""
 
 def levenshtein(s1, s2):

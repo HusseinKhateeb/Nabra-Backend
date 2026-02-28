@@ -6,6 +6,10 @@ import sys
 import time
 from pathlib import Path
 
+# Force UTF-8 encoding for stdout to avoid UnicodeEncodeError on Windows
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import numpy as np
 import torch
 import torchaudio
