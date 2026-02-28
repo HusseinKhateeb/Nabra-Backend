@@ -22,7 +22,8 @@ import cv2
 CHECKPOINT_PATH = 'checkpoints/best_model_acc_82.59.pth'
 WORD_MAP_PATH = 'checkpoints/word_to_idx.json'
 ASR_SCRIPT_PATH = '../audio model/test_asr_ctc.py'
-ASR_VENV_PYTHON = '../audio model/.venv/Scripts/python.exe'
+# Update to absolute path for .venv python
+ASR_VENV_PYTHON = 'D:/Graduation Extra/Nabra Workspace/.venv/Scripts/python.exe'
 
 MOUTH_LANDMARKS = [
     61, 185, 40, 39, 37, 0, 267, 269, 270, 409,
