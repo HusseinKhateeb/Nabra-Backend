@@ -20,6 +20,9 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    connection-timeout: 60000 # 60 seconds
+    max-swallow-size: -1
 
 app:
   security:
@@ -45,6 +48,12 @@ app:
         command: '"src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/.venv/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
       topK: 5
       timeoutSeconds: 60
+
+# logging:
+#   file:
+#     name: spring.log
+#   level:
+#     root: DEBUG
 
 lip:
   command: '"../../.venv-win/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
