@@ -123,7 +123,7 @@ def run_asr(audio_path):
             ASR_VENV_PYTHON,
             ASR_SCRIPT_PATH,
             str(audio_path)
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, encoding='utf-8', timeout=30)
         logging.debug(f"ASR stdout: {result.stdout}")
         logging.debug(f"ASR stderr: {result.stderr}")
         logging.debug(f"ASR returncode: {result.returncode}")
@@ -189,7 +189,27 @@ def main(audio_path, video_path):
     lip_model = lip_model.to(device).eval()
     frames = extract_mouth_frames(video_path)
     lip_word, lip_conf, lip_top = predict_lip(lip_model, frames, device, idx_to_word)
-    audio_text = run_asr(audio_path)
+    asr_output = run_asr(audio_path)
+    # Extract only the Arabic word from ASR output
+    audio_text = ""
+    for line in asr_output.splitlines():
+        if line.strip().lower().startswith("asr (arabic):"):
+            audio_text = line.split(":", 1)[-1].strip()
+            # Fix mojibake if detected
+            if audio_text and any(ord(c) < 32 or ord(c) > 126 for c in audio_text):
+                try:
+                    audio_text = audio_text.encode('latin1').decode('utf-8')
+                except Exception:
+                    pass
+            break
+    if not audio_text:
+        audio_text = asr_output.strip()
+        # Fix mojibake if detected
+        if audio_text and any(ord(c) < 32 or ord(c) > 126 for c in audio_text):
+            try:
+                audio_text = audio_text.encode('latin1').decode('utf-8')
+            except Exception:
+                pass
     fused_word, fused_conf, fusion_reason = fuse(audio_text, lip_top)
     result = {
         "audio_text": audio_text,

@@ -315,17 +315,16 @@ public class LipReadingService {
       if (!StringUtils.hasText(trimmed)) {
         continue;
       }
+      // Only use the cleaned ASR Arabic output for comparison
       if (trimmed.toLowerCase(Locale.ROOT).startsWith("asr (arabic):")) {
         String candidate = sanitizeRecognizedText(trimmed.substring("ASR (Arabic):".length()).trim());
         if (StringUtils.hasText(candidate)) {
+          // Return immediately, only use this for matching
           return candidate;
         }
         continue;
       }
-      String candidate = sanitizeRecognizedText(trimmed);
-      if (StringUtils.hasText(candidate)) {
-        best = candidate;
-      }
+      // Ignore other lines (raw/mojibake)
     }
     return best;
   }
