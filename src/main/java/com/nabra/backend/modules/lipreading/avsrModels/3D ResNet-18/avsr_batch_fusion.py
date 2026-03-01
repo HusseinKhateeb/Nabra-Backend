@@ -12,6 +12,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import logging
 import sys
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import numpy as np
 import torch
@@ -37,6 +38,7 @@ MOUTH_LANDMARKS = [
 _CACHED_DEVICE = None
 _CACHED_MODEL = None
 _CACHED_IDX_TO_WORD = None
+_FUSION_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 
 def load_word_map(word_to_idx_path):
     with open(word_to_idx_path, 'r', encoding='utf-8') as f:
@@ -227,10 +229,14 @@ def run_fusion(audio_path, video_path):
         else:
             model.load_state_dict(ckpt)
         _CACHED_MODEL = model.to(_CACHED_DEVICE).eval()
+        with torch.inference_mode():
+            warmup = torch.zeros((1, 3, 25, 112, 112), device=_CACHED_DEVICE)
+            _CACHED_MODEL(warmup)
 
+    asr_future = _FUSION_EXECUTOR.submit(run_asr, audio_path)
     frames = extract_mouth_frames(video_path)
     lip_word, lip_conf, lip_top = predict_lip(_CACHED_MODEL, frames, _CACHED_DEVICE, _CACHED_IDX_TO_WORD)
-    asr_output = run_asr(audio_path)
+    asr_output = asr_future.result(timeout=35)
     audio_text = extract_audio_text(asr_output)
     fused_word, fused_conf, fusion_reason = fuse(audio_text, lip_top)
     return {
