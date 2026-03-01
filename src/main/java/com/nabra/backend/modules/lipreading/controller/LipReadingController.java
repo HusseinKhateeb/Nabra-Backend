@@ -5,14 +5,26 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import com.nabra.backend.common.web.SecurityUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nabra.backend.modules.lipreading.dto.LipReadingDtos;
 import com.nabra.backend.modules.lipreading.service.LipReadingService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -23,15 +35,31 @@ import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
-import java.nio.file.Path;
-import java.io.File;
 
 @RestController
 @RequestMapping("/api/v1/lipreading")
 @RequiredArgsConstructor
 @Tag(name = "Lip Reading")
 public class LipReadingController {
+  private static final String STATUS_QUEUED = "QUEUED";
+  private static final String STATUS_PROCESSING = "PROCESSING";
+  private static final String STATUS_COMPLETED = "COMPLETED";
+  private static final String STATUS_FAILED = "FAILED";
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final String AVSR_WORK_DIR = "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18";
+  private static final String AVSR_WORKER_SCRIPT = "avsr_batch_fusion_worker.py";
+
+  private static final class FusionJob {
+    private volatile String status;
+    private volatile String rawOutput;
+    private volatile JsonNode parsedResult;
+    private volatile String error;
+
+    private FusionJob(String status) {
+      this.status = status;
+    }
+  }
+
   @GetMapping("/ping")
   public ResponseEntity<String> ping() {
     writeLog("/ping", "INFO", "Ping request received");
@@ -51,6 +79,18 @@ public class LipReadingController {
 
   private final LipReadingService lipReadingService;
   private static final Logger log = LoggerFactory.getLogger(LipReadingController.class);
+  private final Map<String, FusionJob> fusionJobs = new ConcurrentHashMap<>();
+  private final ExecutorService fusionExecutor = Executors.newFixedThreadPool(2);
+  private final Object fusionWorkerLock = new Object();
+  private volatile Process fusionWorkerProcess;
+  private volatile java.io.BufferedWriter fusionWorkerStdin;
+  private volatile java.io.BufferedReader fusionWorkerStdout;
+
+  @PreDestroy
+  public void shutdownFusionExecutor() {
+    stopFusionWorker();
+    fusionExecutor.shutdown();
+  }
 
   /**
    * Cloud inference endpoint (conditional feature in SRS). Offline inference is
@@ -70,9 +110,11 @@ public class LipReadingController {
   }
 
   @PostMapping(value = "/avsr/fuse-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<String> fuseFiles(
+    public ResponseEntity<String> fuseFiles(
       @RequestParam("audioFile") MultipartFile audioFile,
-      @RequestParam("videoFile") MultipartFile videoFile) throws Exception {
+      @RequestParam("videoFile") MultipartFile videoFile,
+      @RequestParam(value = "wait", defaultValue = "true") boolean wait,
+      @RequestParam(value = "timeoutSeconds", defaultValue = "180") long timeoutSeconds) throws Exception {
     log.info("Received fuse-files request");
     log.info("Request received for /fuse-files");
     writeLog("/fuse-files", "START", "Request received");
@@ -86,48 +128,252 @@ public class LipReadingController {
           throw new IllegalArgumentException("videoFile is required");
         }
 
-    Path audioTemp = null;
-    Path videoTemp = null;
+    Path audioTemp = Files.createTempFile("fuse-audio-", extensionOf(audioFile.getOriginalFilename()));
+    Path videoTemp = Files.createTempFile("fuse-video-", extensionOf(videoFile.getOriginalFilename()));
     try {
-      audioTemp = Files.createTempFile("fuse-audio-", extensionOf(audioFile.getOriginalFilename()));
-      videoTemp = Files.createTempFile("fuse-video-", extensionOf(videoFile.getOriginalFilename()));
       audioFile.transferTo(audioTemp);
       videoFile.transferTo(videoTemp);
       log.info("Audio file saved as: {}", audioTemp.getFileName());
       log.info("Video file saved as: {}", videoTemp.getFileName());
       writeLog("/fuse-files", "FILES", "Audio: " + audioTemp.getFileName() + ", Video: " + videoTemp.getFileName());
+    } catch (Exception ex) {
+      deleteQuietly(audioTemp);
+      deleteQuietly(videoTemp);
+      throw ex;
+    }
 
-        // Run the batch AVSR Python script with positional arguments (fixed path)
-        ProcessBuilder pb = new ProcessBuilder(
-          "python",
-          "avsr_batch_fusion.py",
-          audioTemp.toAbsolutePath().toString(),
-          videoTemp.toAbsolutePath().toString()
-        );
-        pb.directory(new File("src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18"));
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
+    String jobId = UUID.randomUUID().toString();
+    fusionJobs.put(jobId, new FusionJob(STATUS_QUEUED));
+    CompletableFuture<Void> jobFuture = CompletableFuture
+        .runAsync(() -> runFusionJob(jobId, audioTemp, videoTemp), fusionExecutor);
 
-      StringBuilder output = new StringBuilder();
-      try (java.io.BufferedReader reader = new java.io.BufferedReader(
-          new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
-        String line;
-        while ((line = reader.readLine()) != null) {
-          output.append(line).append("\n");
+    writeLog("/fuse-files", "ACCEPTED", "Fusion job queued: " + jobId);
+
+    if (wait) {
+      try {
+        jobFuture.get(Math.max(1L, timeoutSeconds), TimeUnit.SECONDS);
+        FusionJob completedJob = fusionJobs.get(jobId);
+        if (completedJob == null) {
+          return ResponseEntity.status(500).body("Fusion failed: missing job state");
         }
+        if (STATUS_COMPLETED.equals(completedJob.status)) {
+          return ResponseEntity.ok(completedJob.rawOutput == null ? "" : completedJob.rawOutput.trim());
+        }
+        if (STATUS_FAILED.equals(completedJob.status)) {
+          String errorText = completedJob.error != null ? completedJob.error : completedJob.rawOutput;
+          return ResponseEntity.status(500).body("Fusion failed: " + (errorText == null ? "Unknown error" : errorText));
+        }
+      } catch (TimeoutException timeoutException) {
+        writeLog("/fuse-files", "TIMEOUT", "Job " + jobId + " still processing after wait timeout");
       }
-      int exitCode = process.waitFor();
-          if (exitCode != 0) {
-            log.error("AVSR fusion failed: {}", output);
-            writeLog("/fuse-files", "ERROR", "AVSR fusion failed: " + output);
-            return ResponseEntity.status(500).body("Fusion failed: " + output);
-          }
-          log.info("Fusion completed successfully.");
-          writeLog("/fuse-files", "SUCCESS", "Fusion completed");
-          return ResponseEntity.ok(output.toString().trim());
+    }
+
+    return ResponseEntity.accepted().body(
+        "Fusion job started. jobId=" + jobId
+            + "\nUse GET /api/v1/lipreading/avsr/fuse-files/status/" + jobId + " to fetch status/result.");
+  }
+
+  @GetMapping("/avsr/fuse-files/status/{jobId}")
+  public ResponseEntity<Map<String, Object>> fuseFilesStatus(@PathVariable String jobId) {
+    FusionJob job = fusionJobs.get(jobId);
+    if (job == null) {
+      return ResponseEntity.status(404).body(Map.of(
+          "jobId", jobId,
+          "status", "NOT_FOUND",
+          "message", "No fusion job found"));
+    }
+
+    return buildJobResponse(jobId, job);
+  }
+
+  private ResponseEntity<Map<String, Object>> buildJobResponse(String jobId, FusionJob job) {
+    if (job == null) {
+      return ResponseEntity.status(404).body(Map.of(
+          "jobId", jobId,
+          "status", "NOT_FOUND",
+          "message", "No fusion job found"));
+    }
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("jobId", jobId);
+    response.put("status", job.status);
+
+    if (STATUS_COMPLETED.equals(job.status)) {
+      response.put("rawOutput", job.rawOutput);
+      response.put("result", job.parsedResult == null ? null : job.parsedResult);
+      return ResponseEntity.ok(response);
+    }
+    if (STATUS_FAILED.equals(job.status)) {
+      response.put("error", job.error);
+      response.put("rawOutput", job.rawOutput);
+      return ResponseEntity.status(500).body(response);
+    }
+    return ResponseEntity.ok(response);
+  }
+
+  private void runFusionJob(String jobId, Path audioTemp, Path videoTemp) {
+    FusionJob job = fusionJobs.get(jobId);
+    if (job == null) {
+      deleteQuietly(audioTemp);
+      deleteQuietly(videoTemp);
+      return;
+    }
+
+    job.status = STATUS_PROCESSING;
+    try {
+      String resultText;
+      try {
+        resultText = invokeFusionViaWorker(audioTemp, videoTemp);
+      } catch (Exception workerException) {
+        log.warn("Worker fusion failed for job {}, falling back to one-shot script", jobId, workerException);
+        writeLog("/fuse-files", "WARN", "Worker fallback for job " + jobId + ": " + workerException.getMessage());
+        resultText = invokeFusionStandalone(audioTemp, videoTemp);
+      }
+
+      log.info("Fusion job {} completed successfully.", jobId);
+      writeLog("/fuse-files", "SUCCESS", "Job " + jobId + " completed");
+      job.rawOutput = resultText;
+      job.parsedResult = extractLastJsonObject(resultText);
+      job.status = STATUS_COMPLETED;
+    } catch (Exception ex) {
+      log.error("AVSR fusion job {} crashed", jobId, ex);
+      writeLog("/fuse-files", "EXCEPTION", "Job " + jobId + " crashed: " + ex.getMessage());
+      job.status = STATUS_FAILED;
+      job.error = ex.getClass().getSimpleName() + ": " + ex.getMessage();
     } finally {
       deleteQuietly(audioTemp);
       deleteQuietly(videoTemp);
+    }
+  }
+
+  private String invokeFusionViaWorker(Path audioTemp, Path videoTemp) throws Exception {
+    synchronized (fusionWorkerLock) {
+      ensureFusionWorkerStarted();
+
+      Map<String, String> request = Map.of(
+          "audioPath", audioTemp.toAbsolutePath().toString(),
+          "videoPath", videoTemp.toAbsolutePath().toString());
+
+      fusionWorkerStdin.write(OBJECT_MAPPER.writeValueAsString(request));
+      fusionWorkerStdin.newLine();
+      fusionWorkerStdin.flush();
+
+      String responseLine = fusionWorkerStdout.readLine();
+      if (responseLine == null) {
+        stopFusionWorker();
+        throw new IOException("Worker closed stdout unexpectedly");
+      }
+
+      JsonNode response = OBJECT_MAPPER.readTree(responseLine);
+      if (!response.path("ok").asBoolean(false)) {
+        throw new IOException(response.path("error").asText("Worker returned unknown error"));
+      }
+
+      return response.path("rawOutput").asText("");
+    }
+  }
+
+  private String invokeFusionStandalone(Path audioTemp, Path videoTemp) throws Exception {
+    ProcessBuilder pb = new ProcessBuilder(
+        "python",
+        "avsr_batch_fusion.py",
+        audioTemp.toAbsolutePath().toString(),
+        videoTemp.toAbsolutePath().toString());
+    pb.directory(new File(AVSR_WORK_DIR));
+    pb.redirectErrorStream(true);
+    Process process = pb.start();
+
+    StringBuilder output = new StringBuilder();
+    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+        new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        output.append(line).append("\n");
+      }
+    }
+
+    int exitCode = process.waitFor();
+    if (exitCode != 0) {
+      throw new IOException(output.toString());
+    }
+    return output.toString();
+  }
+
+  private void ensureFusionWorkerStarted() throws IOException {
+    if (fusionWorkerProcess != null && fusionWorkerProcess.isAlive() && fusionWorkerStdin != null && fusionWorkerStdout != null) {
+      return;
+    }
+
+    stopFusionWorker();
+
+    ProcessBuilder workerPb = new ProcessBuilder("python", AVSR_WORKER_SCRIPT);
+    workerPb.directory(new File(AVSR_WORK_DIR));
+    workerPb.redirectErrorStream(false);
+    Process process = workerPb.start();
+
+    java.io.BufferedWriter stdin = new java.io.BufferedWriter(
+        new java.io.OutputStreamWriter(process.getOutputStream(), java.nio.charset.StandardCharsets.UTF_8));
+    java.io.BufferedReader stdout = new java.io.BufferedReader(
+        new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+    java.io.BufferedReader stderr = new java.io.BufferedReader(
+        new java.io.InputStreamReader(process.getErrorStream(), java.nio.charset.StandardCharsets.UTF_8));
+
+    Thread stderrDrainer = new Thread(() -> {
+      try {
+        String line;
+        while ((line = stderr.readLine()) != null) {
+          log.debug("[avsr-worker] {}", line);
+        }
+      } catch (IOException ignored) {
+      }
+    }, "avsr-worker-stderr");
+    stderrDrainer.setDaemon(true);
+    stderrDrainer.start();
+
+    fusionWorkerProcess = process;
+    fusionWorkerStdin = stdin;
+    fusionWorkerStdout = stdout;
+  }
+
+  private void stopFusionWorker() {
+    synchronized (fusionWorkerLock) {
+      if (fusionWorkerStdin != null) {
+        try {
+          fusionWorkerStdin.close();
+        } catch (IOException ignored) {
+        }
+      }
+      if (fusionWorkerStdout != null) {
+        try {
+          fusionWorkerStdout.close();
+        } catch (IOException ignored) {
+        }
+      }
+      if (fusionWorkerProcess != null && fusionWorkerProcess.isAlive()) {
+        fusionWorkerProcess.destroy();
+      }
+
+      fusionWorkerStdin = null;
+      fusionWorkerStdout = null;
+      fusionWorkerProcess = null;
+    }
+  }
+
+  private JsonNode extractLastJsonObject(String output) {
+    if (output == null || output.isBlank()) {
+      return null;
+    }
+
+    int start = output.lastIndexOf('{');
+    if (start < 0) {
+      return null;
+    }
+
+    String candidate = output.substring(start).trim();
+    try {
+      return OBJECT_MAPPER.readTree(candidate);
+    } catch (Exception ignored) {
+      return null;
     }
   }
 

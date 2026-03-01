@@ -34,6 +34,10 @@ MOUTH_LANDMARKS = [
     95, 88, 178, 87, 14, 317, 402, 318, 324, 308
 ]
 
+_CACHED_DEVICE = None
+_CACHED_MODEL = None
+_CACHED_IDX_TO_WORD = None
+
 def load_word_map(word_to_idx_path):
     with open(word_to_idx_path, 'r', encoding='utf-8') as f:
         word_to_idx = json.load(f)
@@ -60,21 +64,27 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
 
     cap = cv2.VideoCapture(str(video_path))
     frames = []
+    detector = None
+    if mp:
+        try:
+            detector = vision.FaceLandmarker.create_from_options(
+                vision.FaceLandmarkerOptions(
+                    base_options=python.BaseOptions(model_asset_path="models/face_landmarker.task"),
+                    num_faces=1
+                )
+            )
+        except Exception:
+            detector = None
+
     while len(frames) < frame_count:
         ret, frame = cap.read()
         if not ret:
             break
         mouth = None
-        if mp:
+        if detector:
             try:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                detector = vision.FaceLandmarker.create_from_options(
-                    vision.FaceLandmarkerOptions(
-                        base_options=python.BaseOptions(model_asset_path="models/face_landmarker.task"),
-                        num_faces=1
-                    )
-                )
                 result = detector.detect(mp_image)
                 if result.face_landmarks and len(result.face_landmarks) > 0:
                     xs, ys = [], []
@@ -100,6 +110,11 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
         arr = np.transpose(arr, (2, 0, 1))
         frames.append(arr)
     cap.release()
+    if detector:
+        try:
+            detector.close()
+        except Exception:
+            pass
     return frames
 
 def predict_lip(model, frames, device, idx_to_word, top_k=5):
@@ -176,26 +191,12 @@ def fuse(audio_text, lip_predictions):
             return lip_predictions[0][0], lip_predictions[0][1], "lip_fallback"
         return audio_text, 0.5, "audio_fallback"
 
-def main(audio_path, video_path):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    word_to_idx, idx_to_word = load_word_map(WORD_MAP_PATH)
-    num_classes = len(idx_to_word)
-    lip_model = get_lip_model(num_classes)
-    ckpt = torch.load(CHECKPOINT_PATH, map_location=device)
-    if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
-        lip_model.load_state_dict(ckpt['model_state_dict'])
-    else:
-        lip_model.load_state_dict(ckpt)
-    lip_model = lip_model.to(device).eval()
-    frames = extract_mouth_frames(video_path)
-    lip_word, lip_conf, lip_top = predict_lip(lip_model, frames, device, idx_to_word)
-    asr_output = run_asr(audio_path)
-    # Extract only the Arabic word from ASR output
+
+def extract_audio_text(asr_output):
     audio_text = ""
     for line in asr_output.splitlines():
         if line.strip().lower().startswith("asr (arabic):"):
             audio_text = line.split(":", 1)[-1].strip()
-            # Fix mojibake if detected
             if audio_text and any(ord(c) < 32 or ord(c) > 126 for c in audio_text):
                 try:
                     audio_text = audio_text.encode('latin1').decode('utf-8')
@@ -204,14 +205,35 @@ def main(audio_path, video_path):
             break
     if not audio_text:
         audio_text = asr_output.strip()
-        # Fix mojibake if detected
         if audio_text and any(ord(c) < 32 or ord(c) > 126 for c in audio_text):
             try:
                 audio_text = audio_text.encode('latin1').decode('utf-8')
             except Exception:
                 pass
+    return audio_text
+
+
+def run_fusion(audio_path, video_path):
+    global _CACHED_DEVICE, _CACHED_MODEL, _CACHED_IDX_TO_WORD
+
+    if _CACHED_MODEL is None or _CACHED_IDX_TO_WORD is None or _CACHED_DEVICE is None:
+        _CACHED_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        _, _CACHED_IDX_TO_WORD = load_word_map(WORD_MAP_PATH)
+        num_classes = len(_CACHED_IDX_TO_WORD)
+        model = get_lip_model(num_classes)
+        ckpt = torch.load(CHECKPOINT_PATH, map_location=_CACHED_DEVICE)
+        if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
+            model.load_state_dict(ckpt['model_state_dict'])
+        else:
+            model.load_state_dict(ckpt)
+        _CACHED_MODEL = model.to(_CACHED_DEVICE).eval()
+
+    frames = extract_mouth_frames(video_path)
+    lip_word, lip_conf, lip_top = predict_lip(_CACHED_MODEL, frames, _CACHED_DEVICE, _CACHED_IDX_TO_WORD)
+    asr_output = run_asr(audio_path)
+    audio_text = extract_audio_text(asr_output)
     fused_word, fused_conf, fusion_reason = fuse(audio_text, lip_top)
-    result = {
+    return {
         "audio_text": audio_text,
         "lip_word": lip_word,
         "lip_conf": lip_conf,
@@ -220,6 +242,9 @@ def main(audio_path, video_path):
         "fused_conf": fused_conf,
         "fusion_reason": fusion_reason
     }
+
+def main(audio_path, video_path):
+    result = run_fusion(audio_path, video_path)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
