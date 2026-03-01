@@ -12,6 +12,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import logging
 import sys
 import json
+import os
+import atexit
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import numpy as np
@@ -20,6 +22,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import cv2
 import subprocess
+
+try:
+    import mediapipe as mp
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision as mp_vision
+    HAS_MEDIAPIPE = True
+except Exception:
+    mp = None
+    mp_python = None
+    mp_vision = None
+    HAS_MEDIAPIPE = False
 
 # --- Configurable paths ---
 CHECKPOINT_PATH = 'checkpoints/best_model_acc_82.59.pth'
@@ -38,7 +51,42 @@ MOUTH_LANDMARKS = [
 _CACHED_DEVICE = None
 _CACHED_MODEL = None
 _CACHED_IDX_TO_WORD = None
+_CACHED_FACE_DETECTOR = None
 _FUSION_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+DEFAULT_FRAME_COUNT = max(8, int(os.getenv("AVSR_FRAME_COUNT", "25")))
+
+
+def get_face_detector():
+    global _CACHED_FACE_DETECTOR
+
+    if not HAS_MEDIAPIPE:
+        return None
+
+    if _CACHED_FACE_DETECTOR is None:
+        try:
+            _CACHED_FACE_DETECTOR = mp_vision.FaceLandmarker.create_from_options(
+                mp_vision.FaceLandmarkerOptions(
+                    base_options=mp_python.BaseOptions(model_asset_path="models/face_landmarker.task"),
+                    num_faces=1
+                )
+            )
+        except Exception:
+            _CACHED_FACE_DETECTOR = None
+    return _CACHED_FACE_DETECTOR
+
+
+def cleanup_cached_resources():
+    global _CACHED_FACE_DETECTOR
+    if _CACHED_FACE_DETECTOR is not None:
+        try:
+            _CACHED_FACE_DETECTOR.close()
+        except Exception:
+            pass
+        _CACHED_FACE_DETECTOR = None
+    _FUSION_EXECUTOR.shutdown(wait=False)
+
+
+atexit.register(cleanup_cached_resources)
 
 def load_word_map(word_to_idx_path):
     with open(word_to_idx_path, 'r', encoding='utf-8') as f:
@@ -57,26 +105,9 @@ def get_lip_model(num_classes):
     return model
 
 def extract_mouth_frames(video_path, img_size=112, frame_count=25):
-    try:
-        import mediapipe as mp
-        from mediapipe.tasks import python
-        from mediapipe.tasks.python import vision
-    except Exception:
-        mp = None
-
     cap = cv2.VideoCapture(str(video_path))
     frames = []
-    detector = None
-    if mp:
-        try:
-            detector = vision.FaceLandmarker.create_from_options(
-                vision.FaceLandmarkerOptions(
-                    base_options=python.BaseOptions(model_asset_path="models/face_landmarker.task"),
-                    num_faces=1
-                )
-            )
-        except Exception:
-            detector = None
+    detector = get_face_detector()
 
     while len(frames) < frame_count:
         ret, frame = cap.read()
@@ -112,11 +143,6 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
         arr = np.transpose(arr, (2, 0, 1))
         frames.append(arr)
     cap.release()
-    if detector:
-        try:
-            detector.close()
-        except Exception:
-            pass
     return frames
 
 def predict_lip(model, frames, device, idx_to_word, top_k=5):
@@ -215,7 +241,7 @@ def extract_audio_text(asr_output):
     return audio_text
 
 
-def run_fusion(audio_path, video_path):
+def run_fusion(audio_path, video_path, frame_count=None):
     global _CACHED_DEVICE, _CACHED_MODEL, _CACHED_IDX_TO_WORD
 
     if _CACHED_MODEL is None or _CACHED_IDX_TO_WORD is None or _CACHED_DEVICE is None:
@@ -234,7 +260,8 @@ def run_fusion(audio_path, video_path):
             _CACHED_MODEL(warmup)
 
     asr_future = _FUSION_EXECUTOR.submit(run_asr, audio_path)
-    frames = extract_mouth_frames(video_path)
+    effective_frame_count = DEFAULT_FRAME_COUNT if frame_count is None else max(8, int(frame_count))
+    frames = extract_mouth_frames(video_path, frame_count=effective_frame_count)
     lip_word, lip_conf, lip_top = predict_lip(_CACHED_MODEL, frames, _CACHED_DEVICE, _CACHED_IDX_TO_WORD)
     asr_output = asr_future.result(timeout=35)
     audio_text = extract_audio_text(asr_output)
@@ -249,12 +276,13 @@ def run_fusion(audio_path, video_path):
         "fusion_reason": fusion_reason
     }
 
-def main(audio_path, video_path):
-    result = run_fusion(audio_path, video_path)
+def main(audio_path, video_path, frame_count=None):
+    result = run_fusion(audio_path, video_path, frame_count=frame_count)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python avsr_batch_fusion.py <audio_file> <video_file>")
+    if len(sys.argv) < 3 or len(sys.argv) > 4:
+        print("Usage: python avsr_batch_fusion.py <audio_file> <video_file> [frame_count]")
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+    fc = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    main(sys.argv[1], sys.argv[2], frame_count=fc)

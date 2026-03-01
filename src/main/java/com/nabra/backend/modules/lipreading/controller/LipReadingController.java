@@ -114,7 +114,9 @@ public class LipReadingController {
       @RequestParam("audioFile") MultipartFile audioFile,
       @RequestParam("videoFile") MultipartFile videoFile,
       @RequestParam(value = "wait", defaultValue = "true") boolean wait,
-      @RequestParam(value = "timeoutSeconds", defaultValue = "180") long timeoutSeconds) throws Exception {
+      @RequestParam(value = "timeoutSeconds", defaultValue = "180") long timeoutSeconds,
+      @RequestParam(value = "fast", defaultValue = "false") boolean fast,
+      @RequestParam(value = "frameCount", required = false) Integer frameCount) throws Exception {
     log.info("Received fuse-files request");
     log.info("Request received for /fuse-files");
     writeLog("/fuse-files", "START", "Request received");
@@ -145,7 +147,7 @@ public class LipReadingController {
     String jobId = UUID.randomUUID().toString();
     fusionJobs.put(jobId, new FusionJob(STATUS_QUEUED));
     CompletableFuture<Void> jobFuture = CompletableFuture
-        .runAsync(() -> runFusionJob(jobId, audioTemp, videoTemp), fusionExecutor);
+      .runAsync(() -> runFusionJob(jobId, audioTemp, videoTemp, fast, frameCount), fusionExecutor);
 
     writeLog("/fuse-files", "ACCEPTED", "Fusion job queued: " + jobId);
 
@@ -223,11 +225,11 @@ public class LipReadingController {
     try {
       String resultText;
       try {
-        resultText = invokeFusionViaWorker(audioTemp, videoTemp);
+        resultText = invokeFusionViaWorker(audioTemp, videoTemp, false, null);
       } catch (Exception workerException) {
         log.warn("Worker fusion failed for job {}, falling back to one-shot script", jobId, workerException);
         writeLog("/fuse-files", "WARN", "Worker fallback for job " + jobId + ": " + workerException.getMessage());
-        resultText = invokeFusionStandalone(audioTemp, videoTemp);
+        resultText = invokeFusionStandalone(audioTemp, videoTemp, false, null);
       }
 
       log.info("Fusion job {} completed successfully.", jobId);
@@ -247,12 +249,55 @@ public class LipReadingController {
   }
 
   private String invokeFusionViaWorker(Path audioTemp, Path videoTemp) throws Exception {
+    return invokeFusionViaWorker(audioTemp, videoTemp, false, null);
+  }
+
+  private void runFusionJob(String jobId, Path audioTemp, Path videoTemp, boolean fast, Integer frameCount) {
+    FusionJob job = fusionJobs.get(jobId);
+    if (job == null) {
+      deleteQuietly(audioTemp);
+      deleteQuietly(videoTemp);
+      return;
+    }
+
+    job.status = STATUS_PROCESSING;
+    try {
+      String resultText;
+      try {
+        resultText = invokeFusionViaWorker(audioTemp, videoTemp, fast, frameCount);
+      } catch (Exception workerException) {
+        log.warn("Worker fusion failed for job {}, falling back to one-shot script", jobId, workerException);
+        writeLog("/fuse-files", "WARN", "Worker fallback for job " + jobId + ": " + workerException.getMessage());
+        resultText = invokeFusionStandalone(audioTemp, videoTemp, fast, frameCount);
+      }
+
+      log.info("Fusion job {} completed successfully.", jobId);
+      writeLog("/fuse-files", "SUCCESS", "Job " + jobId + " completed");
+      job.rawOutput = resultText;
+      job.parsedResult = extractLastJsonObject(resultText);
+      job.status = STATUS_COMPLETED;
+    } catch (Exception ex) {
+      log.error("AVSR fusion job {} crashed", jobId, ex);
+      writeLog("/fuse-files", "EXCEPTION", "Job " + jobId + " crashed: " + ex.getMessage());
+      job.status = STATUS_FAILED;
+      job.error = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+    } finally {
+      deleteQuietly(audioTemp);
+      deleteQuietly(videoTemp);
+    }
+  }
+
+  private String invokeFusionViaWorker(Path audioTemp, Path videoTemp, boolean fast, Integer frameCount) throws Exception {
     synchronized (fusionWorkerLock) {
       ensureFusionWorkerStarted();
 
-      Map<String, String> request = Map.of(
-          "audioPath", audioTemp.toAbsolutePath().toString(),
-          "videoPath", videoTemp.toAbsolutePath().toString());
+      Map<String, Object> request = new LinkedHashMap<>();
+      request.put("audioPath", audioTemp.toAbsolutePath().toString());
+      request.put("videoPath", videoTemp.toAbsolutePath().toString());
+      request.put("fast", fast);
+      if (frameCount != null) {
+        request.put("frameCount", frameCount);
+      }
 
       fusionWorkerStdin.write(OBJECT_MAPPER.writeValueAsString(request));
       fusionWorkerStdin.newLine();
@@ -273,12 +318,19 @@ public class LipReadingController {
     }
   }
 
-  private String invokeFusionStandalone(Path audioTemp, Path videoTemp) throws Exception {
-    ProcessBuilder pb = new ProcessBuilder(
-        "python",
-        "avsr_batch_fusion.py",
-        audioTemp.toAbsolutePath().toString(),
-        videoTemp.toAbsolutePath().toString());
+  private String invokeFusionStandalone(Path audioTemp, Path videoTemp, boolean fast, Integer frameCount) throws Exception {
+    java.util.List<String> command = new java.util.ArrayList<>();
+    command.add("python");
+    command.add("avsr_batch_fusion.py");
+    command.add(audioTemp.toAbsolutePath().toString());
+    command.add(videoTemp.toAbsolutePath().toString());
+    if (frameCount != null) {
+      command.add(String.valueOf(frameCount));
+    } else if (fast) {
+      command.add("16");
+    }
+
+    ProcessBuilder pb = new ProcessBuilder(command);
     pb.directory(new File(AVSR_WORK_DIR));
     pb.redirectErrorStream(true);
     Process process = pb.start();

@@ -29,12 +29,17 @@ def main():
             request = json.loads(payload)
             audio_path = request.get("audioPath")
             video_path = request.get("videoPath")
+            frame_count = request.get("frameCount")
+            fast = bool(request.get("fast", False))
 
             if not audio_path or not video_path:
                 print(json.dumps({"ok": False, "error": "audioPath and videoPath are required"}, ensure_ascii=False), flush=True)
                 continue
 
-            result = run_fusion(audio_path, video_path)
+            if frame_count is None and fast:
+                frame_count = 16
+
+            result = run_fusion(audio_path, video_path, frame_count=frame_count)
             raw_output = json.dumps(result, ensure_ascii=False, indent=2)
             print(json.dumps({"ok": True, "rawOutput": raw_output}, ensure_ascii=False), flush=True)
         except Exception as ex:
