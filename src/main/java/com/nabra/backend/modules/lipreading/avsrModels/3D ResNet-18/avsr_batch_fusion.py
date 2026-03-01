@@ -108,6 +108,7 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
     cap = cv2.VideoCapture(str(video_path))
     frames = []
     detector = get_face_detector()
+    detected_face_frames = 0
 
     while len(frames) < frame_count:
         ret, frame = cap.read()
@@ -120,6 +121,7 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 result = detector.detect(mp_image)
                 if result.face_landmarks and len(result.face_landmarks) > 0:
+                    detected_face_frames += 1
                     xs, ys = [], []
                     for idx in MOUTH_LANDMARKS:
                         if idx < len(result.face_landmarks[0]):
@@ -143,7 +145,7 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
         arr = np.transpose(arr, (2, 0, 1))
         frames.append(arr)
     cap.release()
-    return frames
+    return frames, detected_face_frames, detector is not None
 
 def predict_lip(model, frames, device, idx_to_word, top_k=5):
     frames_array = np.stack(frames, axis=1)
@@ -261,7 +263,11 @@ def run_fusion(audio_path, video_path, frame_count=None):
 
     asr_future = _FUSION_EXECUTOR.submit(run_asr, audio_path)
     effective_frame_count = DEFAULT_FRAME_COUNT if frame_count is None else max(8, int(frame_count))
-    frames = extract_mouth_frames(video_path, frame_count=effective_frame_count)
+    frames, detected_face_frames, face_detection_enabled = extract_mouth_frames(video_path, frame_count=effective_frame_count)
+    if not frames:
+        raise RuntimeError("No frames could be extracted from the video")
+    if face_detection_enabled and detected_face_frames == 0:
+        raise RuntimeError("No face detected in video frames")
     lip_word, lip_conf, lip_top = predict_lip(_CACHED_MODEL, frames, _CACHED_DEVICE, _CACHED_IDX_TO_WORD)
     asr_output = asr_future.result(timeout=35)
     audio_text = extract_audio_text(asr_output)

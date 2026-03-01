@@ -163,6 +163,9 @@ public class LipReadingController {
         }
         if (STATUS_FAILED.equals(completedJob.status)) {
           String errorText = completedJob.error != null ? completedJob.error : completedJob.rawOutput;
+          if (isNoFaceError(errorText)) {
+            return ResponseEntity.unprocessableEntity().body("No face detected in video frames");
+          }
           return ResponseEntity.status(500).body("Fusion failed: " + (errorText == null ? "Unknown error" : errorText));
         }
       } catch (TimeoutException timeoutException) {
@@ -208,9 +211,20 @@ public class LipReadingController {
     if (STATUS_FAILED.equals(job.status)) {
       response.put("error", job.error);
       response.put("rawOutput", job.rawOutput);
+      if (isNoFaceError(job.error)) {
+        return ResponseEntity.unprocessableEntity().body(response);
+      }
       return ResponseEntity.status(500).body(response);
     }
     return ResponseEntity.ok(response);
+  }
+
+  private boolean isNoFaceError(String message) {
+    if (message == null) {
+      return false;
+    }
+    String normalized = message.toLowerCase(Locale.ROOT);
+    return normalized.contains("no face detected");
   }
 
   private void runFusionJob(String jobId, Path audioTemp, Path videoTemp) {
