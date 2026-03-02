@@ -36,7 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     String token = header.substring(7);
     try {
       Jws<Claims> jws = jwtService.parse(token);
-      String userId = jws.getBody().getSubject();
+      String userId = jws.getPayload().getSubject();
 
       if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
         var principal = userDetailsService.loadById(userId);

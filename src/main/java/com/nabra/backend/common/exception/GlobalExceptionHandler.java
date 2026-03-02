@@ -26,6 +26,24 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
   }
 
+  @ExceptionHandler(NotFoundException.class)
+  public ResponseEntity<ApiError> handleNotFound(NotFoundException ex, HttpServletRequest req) {
+    ApiError body = ApiError.of(404, "Not Found", ex.getMessage(), req.getRequestURI(), Map.of());
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+  }
+
+  @ExceptionHandler(ForbiddenException.class)
+  public ResponseEntity<ApiError> handleForbidden(ForbiddenException ex, HttpServletRequest req) {
+    ApiError body = ApiError.of(403, "Forbidden", ex.getMessage(), req.getRequestURI(), Map.of());
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+  }
+
+  @ExceptionHandler(BadRequestException.class)
+  public ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest req) {
+    ApiError body = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI(), Map.of());
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+  }
+
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<ApiError> handleIllegalArg(IllegalArgumentException ex, HttpServletRequest req) {
     ApiError body = ApiError.of(400, "Bad Request", ex.getMessage(), req.getRequestURI(), Map.of());

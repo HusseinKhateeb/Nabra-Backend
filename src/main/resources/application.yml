@@ -2,12 +2,17 @@ spring:
   application:
     name: nabra-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/nabra
-    username: nabra
-    password: nabra
+    url: jdbc:h2:mem:nabra
+    driverClassName: org.h2.Driver
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
   jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: update  # for scaffold/dev; use migrations in production
+      ddl-auto: create-drop  # create-drop for in-memory, use update for PostgreSQL
     properties:
       hibernate:
         format_sql: true
