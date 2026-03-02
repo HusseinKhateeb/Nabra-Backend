@@ -3,9 +3,7 @@ spring:
     name: nabra-backend
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/nabra
-    username: postgres
-    password: MST
+     url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
 
   jpa:
     hibernate:
@@ -30,7 +28,7 @@ spring:
             enable: true
 
 server:
-  port: 8080
+  port: 8081
 
 app:
   security:

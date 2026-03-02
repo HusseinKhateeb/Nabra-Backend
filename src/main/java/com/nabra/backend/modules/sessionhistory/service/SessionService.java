@@ -5,7 +5,6 @@ import com.nabra.backend.common.exception.ForbiddenException;
 import com.nabra.backend.common.exception.NotFoundException;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
-import com.nabra.backend.common.model.Enums.SessionType;
 import com.nabra.backend.modules.sessionhistory.dto.SessionDtos;
 import com.nabra.backend.modules.sessionhistory.model.Session;
 import com.nabra.backend.modules.sessionhistory.repository.SessionRepository;
@@ -32,15 +31,12 @@ public class SessionService {
     return new SessionDtos.SessionResponse(
         s.getId(),
         s.getUser().getId(),
-        s.getSessionType(),
         s.getInputType(),
         s.getOutputType(),
         s.getStatus(),
         s.getStartedAt(),
         s.getEndedAt(),
         s.getDurationSeconds(),
-        s.getContent(),
-        s.getContentRefId(),
         s.getResultText(),
         s.getResultAudioUrl(),
         s.getAccuracyScore(),
@@ -52,19 +48,13 @@ public class SessionService {
 
   @Transactional
   public SessionDtos.SessionResponse start(String userId, SessionDtos.StartSessionRequest req) {
-    if (req.sessionType() == null) {
-      throw new BadRequestException("sessionType is required");
-    }
-
     User user = userService.getById(userId);
     Session s = new Session();
     s.setUser(user);
-    s.setSessionType(req.sessionType());
     s.setInputType(req.inputType());
     s.setOutputType(req.outputType());
     s.setStatus(SessionStatus.ACTIVE);
     s.setStartedAt(Instant.now());
-    s.setContent(req.contentPreview());
     s.setDeviceInfo(req.deviceInfo());
     s.setModelVersion(req.modelVersion());
     s.setIsOffline(req.isOffline() != null ? req.isOffline() : false);
@@ -89,7 +79,6 @@ public class SessionService {
     }
 
     if (req.content() != null) s.setContent(req.content());
-    if (req.contentRefId() != null) s.setContentRefId(req.contentRefId());
     if (req.resultText() != null) s.setResultText(req.resultText());
     if (req.resultAudioUrl() != null) s.setResultAudioUrl(req.resultAudioUrl());
     if (req.accuracyScore() != null) s.setAccuracyScore(req.accuracyScore());
@@ -137,7 +126,6 @@ public class SessionService {
       String userId,
       Optional<Instant> from,
       Optional<Instant> to,
-      Optional<String> sessionType,
       Optional<String> status,
       Optional<String> outputType,
       Optional<String> keyword,
@@ -152,17 +140,6 @@ public class SessionService {
     }
     if (to.isPresent()) {
       spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("startedAt"), to.get()));
-    }
-
-    if (sessionType.isPresent() && !sessionType.get().isBlank()) {
-      spec = spec.and((root, query, cb) -> {
-        try {
-          SessionType type = SessionType.valueOf(sessionType.get().toUpperCase());
-          return cb.equal(root.get("sessionType"), type);
-        } catch (IllegalArgumentException e) {
-          throw new BadRequestException("Invalid sessionType: " + sessionType.get());
-        }
-      });
     }
 
     if (status.isPresent() && !status.get().isBlank()) {
@@ -189,10 +166,7 @@ public class SessionService {
 
     if (keyword.isPresent() && !keyword.get().isBlank()) {
       String like = "%" + keyword.get().toLowerCase() + "%";
-      spec = spec.and((root, query, cb) -> cb.or(
-          cb.like(cb.lower(root.get("content")), like),
-          cb.like(cb.lower(root.get("resultText")), like)
-      ));
+      spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("resultText")), like));
     }
 
     if (minDuration.isPresent()) {
@@ -205,3 +179,4 @@ public class SessionService {
     return sessionRepository.findAll(spec, pageable).map(this::toDto);
   }
 }
+

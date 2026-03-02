@@ -4,7 +4,6 @@ import com.nabra.backend.common.model.BaseEntity;
 import com.nabra.backend.common.model.Enums.SessionInputType;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
-import com.nabra.backend.common.model.Enums.SessionType;
 import com.nabra.backend.modules.usermanagement.model.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -16,7 +15,6 @@ import java.time.Instant;
 @Table(name = "sessions", indexes = {
     @Index(name = "idx_sessions_user_started", columnList = "user_id, startedAt"),
     @Index(name = "idx_sessions_output_type", columnList = "outputType"),
-    @Index(name = "idx_sessions_type", columnList = "sessionType"),
     @Index(name = "idx_sessions_status", columnList = "status")
 })
 @Getter
@@ -26,11 +24,6 @@ public class Session extends BaseEntity {
   @ManyToOne(optional = false, fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", nullable = false)
   private User user;
-
-  /** Session type: LIP_READING, CHAT, VOICE_TO_TEXT, or LEARNING. */
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private SessionType sessionType = SessionType.LIP_READING;
 
   /** Live camera or recorded video input. */
   @Enumerated(EnumType.STRING)
@@ -54,14 +47,6 @@ public class Session extends BaseEntity {
   /** Derived when session ends. */
   private Long durationSeconds;
 
-  /** Main content: transcript, chat summary, recognized text, learning progress summary. */
-  @Column(length = 5000)
-  private String content;
-
-  /** Optional reference to related record (messageId, chatId, learningProgressId). */
-  @Column(length = 100)
-  private String contentRefId;
-
   /** Final recognized Arabic text result (single sentence as per SRS scope). */
   @Column(length = 2000)
   private String resultText;
@@ -83,4 +68,8 @@ public class Session extends BaseEntity {
 
   /** Whether session was processed offline. */
   private Boolean isOffline = false;
+
+  /** Generic content field for future extensibility. */
+  @Column(length = 5000)
+  private String content;
 }

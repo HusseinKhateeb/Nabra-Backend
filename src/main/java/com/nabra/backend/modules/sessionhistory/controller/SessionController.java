@@ -49,7 +49,7 @@ public class SessionController {
   }
 
   /**
-   * Fetch session history with comprehensive filters (date/type/status/duration/content/keyword).
+   * Fetch lip reading session history with filters (date/status/duration/keyword).
    */
   @GetMapping
   public ResponseEntity<Page<SessionDtos.SessionResponse>> list(
@@ -57,13 +57,11 @@ public class SessionController {
       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> from,
       @Parameter(description = "Filter: to (inclusive) ISO instant")
       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> to,
-      @Parameter(description = "Filter: sessionType LIP_READING|CHAT|VOICE_TO_TEXT|LEARNING")
-      @RequestParam Optional<String> sessionType,
       @Parameter(description = "Filter: status ACTIVE|COMPLETED|FAILED")
       @RequestParam Optional<String> status,
       @Parameter(description = "Filter: outputType TEXT|VOICE")
       @RequestParam Optional<String> outputType,
-      @Parameter(description = "Filter: keyword search in content and result text")
+      @Parameter(description = "Filter: keyword search in result text")
       @RequestParam Optional<String> keyword,
       @Parameter(description = "Filter: minimum duration in seconds")
       @RequestParam Optional<Long> minDuration,
@@ -74,7 +72,7 @@ public class SessionController {
     var p = SecurityUtils.currentPrincipal();
     return ResponseEntity.ok(sessionService.list(
         p.getUserId(),
-        from, to, sessionType, status, outputType, keyword, minDuration, maxDuration,
+        from, to, status, outputType, keyword, minDuration, maxDuration,
         pageable
     ));
   }
