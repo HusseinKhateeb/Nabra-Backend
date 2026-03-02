@@ -14,11 +14,22 @@ public class ChatDtos {
       @NotEmpty Set<String> participantUserIds
   ) {}
 
-  public record ChatResponse(
-      String id,
-      boolean groupChat,
-      String title,
-      Set<String> participantUserIds,
-      Instant lastMessageAt
-  ) {}
+public record ChatResponse(
+    String id,
+    boolean groupChat,
+    String title,
+    Set<ChatParticipantDto> participants,
+    Instant lastMessageAt,
+    String lastMessageText,
+    long unreadCount
+) {}
+
+
+public record ChatParticipantDto(
+    String id,
+    String displayName,
+    String avatarUrl
+) {}
+
+
 }

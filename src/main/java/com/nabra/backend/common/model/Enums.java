@@ -5,6 +5,9 @@ public class Enums {
 
   public enum UserRole { USER, ADMIN }
 
+  // User account status
+  public enum UserStatus { ACTIVE, INACTIVE, SUSPENDED, DELETED }
+
   // Represents the user's accessibility / usage type from SRS (deaf, mute, hearing, instructor, etc.)
   public enum UserType { DEAF, MUTE, HEARING, INSTRUCTOR, OTHER }
 

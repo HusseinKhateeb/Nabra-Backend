@@ -1,23 +1,33 @@
 spring:
   application:
     name: nabra-backend
+
   datasource:
-    url: jdbc:h2:mem:nabra
-    driverClassName: org.h2.Driver
-    username: sa
-    password: 
-  h2:
-    console:
-      enabled: true
+    url: jdbc:postgresql://localhost:5432/nabra
+    username: postgres
+    password: MST
+
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: create-drop  # create-drop for in-memory, use update for PostgreSQL
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+
   jackson:
     time-zone: UTC
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: odehteam935@gmail.com
+    password: towdnaeenrkzeuhi
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   port: 8080
@@ -25,11 +35,16 @@ server:
 app:
   security:
     jwt:
-      # IMPORTANT: set a long, random secret in production (min 32 chars)
       secret: "change-me-change-me-change-me-change-me"
       expirationSeconds: 86400
+
+  frontend:
+    allowedOrigins:
+      - "http://localhost:3000"
+      - "http://localhost:3001"
+      - "http://localhost:4200"
+
   ai:
-    # Optional microservices, enable by setting baseUrl(s)
     lipreading:
       baseUrl: ""
     prediction:
@@ -41,3 +56,7 @@ logging:
   level:
     org.hibernate.SQL: debug
 
+# ✅ Google OAuth (هام)
+google:
+  oauth:
+    client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
