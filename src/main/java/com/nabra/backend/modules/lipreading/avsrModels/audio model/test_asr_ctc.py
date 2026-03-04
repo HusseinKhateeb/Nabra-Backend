@@ -12,8 +12,12 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import numpy as np
 import torch
-import torchaudio
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+
+try:
+    import torchaudio
+except Exception:
+    torchaudio = None
 
 
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "0")
@@ -21,6 +25,50 @@ os.environ.setdefault("HF_HUB_OFFLINE", "0")
 
 
 def load_audio(audio_path: str):
+    try:
+        import soundfile as sf
+        samples, sr = sf.read(audio_path, always_2d=True, dtype="float32")
+        waveform = torch.from_numpy(samples.T)
+        return waveform, int(sr)
+    except Exception:
+        pass
+
+    try:
+        import wave
+        with wave.open(audio_path, "rb") as wav_file:
+            sr = wav_file.getframerate()
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            nframes = wav_file.getnframes()
+            raw = wav_file.readframes(nframes)
+
+        if sample_width == 1:
+            np_audio = np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
+            np_audio = (np_audio - 128.0) / 128.0
+        elif sample_width == 2:
+            np_audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        elif sample_width == 4:
+            np_audio = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
+        else:
+            raise ValueError(f"Unsupported WAV sample width: {sample_width}")
+
+        if channels > 1:
+            np_audio = np_audio.reshape(-1, channels)
+            waveform = torch.from_numpy(np_audio.T)
+        else:
+            waveform = torch.from_numpy(np_audio.reshape(1, -1))
+        return waveform, int(sr)
+    except Exception:
+        pass
+
+    if torchaudio is None:
+        raise ImportError(
+            "Failed to load audio. Install one of:\n"
+            "1) pip install soundfile\n"
+            "2) pip install torchcodec\n"
+            "3) pip install pydub imageio-ffmpeg"
+        )
+
     try:
         return torchaudio.load(audio_path)
     except Exception as exc:
@@ -98,7 +146,15 @@ def transcribe_waveform(
 
     target_sr = processor.feature_extractor.sampling_rate
     if sr != target_sr:
-        waveform = torchaudio.functional.resample(waveform, sr, target_sr)
+        if torchaudio is not None:
+            waveform = torchaudio.functional.resample(waveform, sr, target_sr)
+        else:
+            original_len = waveform.size(1)
+            target_len = max(1, int(round(original_len * float(target_sr) / float(sr))))
+            src_idx = np.linspace(0.0, 1.0, num=original_len, endpoint=True)
+            dst_idx = np.linspace(0.0, 1.0, num=target_len, endpoint=True)
+            resampled = np.interp(dst_idx, src_idx, waveform.squeeze(0).cpu().numpy()).astype(np.float32)
+            waveform = torch.from_numpy(resampled).unsqueeze(0)
         sr = target_sr
 
     inputs = processor(

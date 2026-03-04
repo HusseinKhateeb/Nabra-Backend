@@ -14,6 +14,8 @@ import sys
 import json
 import os
 import atexit
+import threading
+import importlib.util
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import numpy as np
@@ -57,9 +59,11 @@ _CACHED_DEVICE = None
 _CACHED_MODEL = None
 _CACHED_IDX_TO_WORD = None
 _CACHED_FACE_DETECTOR = None
+_CACHED_ASR = None
+_ASR_LOCK = threading.Lock()
 _FUSION_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 DEFAULT_FRAME_COUNT = max(8, int(os.getenv("AVSR_FRAME_COUNT", "25")))
-ASR_SUBPROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("AVSR_ASR_TIMEOUT_SECONDS", "180")))
+ASR_SUBPROCESS_TIMEOUT_SECONDS = max(20, int(os.getenv("AVSR_ASR_TIMEOUT_SECONDS", "45")))
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
 
@@ -162,9 +166,9 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
                 pass
         if mouth is not None and mouth.size > 0:
             last_good_mouth = mouth
-        elif detector and last_good_mouth is not None:
+        elif last_good_mouth is not None:
             mouth = last_good_mouth
-        elif not detector:
+        else:
             mouth = fallback_mouth_crop(frame)
 
         if mouth is None or mouth.size == 0:
@@ -208,22 +212,50 @@ def run_asr(audio_path):
     logging.basicConfig(filename='avsr_batch_fusion.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
     logging.debug(f"ASR audio_path: {audio_path}")
     logging.debug(f"ASR script path: {ASR_SCRIPT_PATH}")
+
+    asr_script_file = (Path(__file__).resolve().parent / ASR_SCRIPT_PATH).resolve()
+    try:
+        global _CACHED_ASR
+        with _ASR_LOCK:
+            if _CACHED_ASR is None:
+                spec = importlib.util.spec_from_file_location("nabra_test_asr_ctc", str(asr_script_file))
+                if spec is None or spec.loader is None:
+                    raise RuntimeError(f"Could not load ASR module spec: {asr_script_file}")
+                asr_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(asr_module)
+                model_id = os.getenv("AVSR_ASR_MODEL", "elgeish/wav2vec2-large-xlsr-53-levantine-arabic")
+                processor, model, device = asr_module.load_asr(model_id)
+                _CACHED_ASR = (asr_module, processor, model, device)
+
+        asr_module, processor, model, device = _CACHED_ASR
+        waveform, sr = asr_module.load_audio(str(audio_path))
+        raw_text = asr_module.transcribe_waveform(waveform, sr, processor, model, device)
+        if hasattr(asr_module, "normalize_asr_text"):
+            normalized = asr_module.normalize_asr_text(raw_text)
+        else:
+            normalized = raw_text.strip()
+        if normalized:
+            return f"ASR (Arabic): {normalized}"
+        return raw_text.strip()
+    except Exception as e:
+        logging.error(f"ASR in-process error: {e}")
+
     python_exec = next((candidate for candidate in ASR_PYTHON_CANDIDATES if candidate and Path(candidate).exists()), sys.executable)
-    logging.debug(f"ASR python exec: {python_exec}")
+    logging.debug(f"ASR fallback python exec: {python_exec}")
     try:
         result = subprocess.run([
             python_exec,
-            ASR_SCRIPT_PATH,
+            str(asr_script_file),
             str(audio_path)
         ], capture_output=True, text=True, encoding='utf-8', timeout=ASR_SUBPROCESS_TIMEOUT_SECONDS)
-        logging.debug(f"ASR stdout: {result.stdout}")
-        logging.debug(f"ASR stderr: {result.stderr}")
-        logging.debug(f"ASR returncode: {result.returncode}")
+        logging.debug(f"ASR fallback stdout: {result.stdout}")
+        logging.debug(f"ASR fallback stderr: {result.stderr}")
+        logging.debug(f"ASR fallback returncode: {result.returncode}")
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ASR exited with code {result.returncode}")
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ASR fallback exited with code {result.returncode}")
         return result.stdout.strip()
     except Exception as e:
-        logging.error(f"ASR subprocess error: {e}")
+        logging.error(f"ASR fallback error: {e}")
         return ""
 
 def levenshtein(s1, s2):
