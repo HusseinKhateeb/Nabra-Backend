@@ -59,7 +59,7 @@ public class LipReadingController {
       this.status = status;
     }
   }
-
+// Simple health check endpoint
   @GetMapping("/ping")
   public ResponseEntity<String> ping() {
     writeLog("/ping", "INFO", "Ping request received");
