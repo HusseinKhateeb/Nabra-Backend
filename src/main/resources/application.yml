@@ -40,12 +40,13 @@ app:
       baseUrl: ""
     avsr:
       pythonCommand: "python"
+      # Optional env var: AVSR_ASR_TIMEOUT_SECONDS (default 180)
       # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py --video {video} --top-k {topK}"
       lip:
-        command: '"src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/.venv-win/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
       # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py {audio}"
       audio:
-        command: '"src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/.venv/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
       topK: 5
       timeoutSeconds: 60
 
@@ -56,6 +57,6 @@ app:
 #     root: DEBUG
 
 lip:
-  command: '"../../.venv-win/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
 audio:
-  command: '"../../.venv/Scripts/python.exe" "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'

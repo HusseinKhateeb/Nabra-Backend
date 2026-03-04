@@ -110,7 +110,7 @@ public class LipReadingController {
   }
 
   @PostMapping(value = "/avsr/fuse-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> fuseFiles(
+    public ResponseEntity<Object> fuseFiles(
       @RequestParam("audioFile") MultipartFile audioFile,
       @RequestParam("videoFile") MultipartFile videoFile,
       @RequestParam(value = "wait", defaultValue = "true") boolean wait,
@@ -159,6 +159,9 @@ public class LipReadingController {
           return ResponseEntity.status(500).body("Fusion failed: missing job state");
         }
         if (STATUS_COMPLETED.equals(completedJob.status)) {
+          if (completedJob.parsedResult != null) {
+            return ResponseEntity.ok(completedJob.parsedResult);
+          }
           return ResponseEntity.ok(completedJob.rawOutput == null ? "" : completedJob.rawOutput.trim());
         }
         if (STATUS_FAILED.equals(completedJob.status)) {
@@ -173,13 +176,16 @@ public class LipReadingController {
       }
     }
 
-    return ResponseEntity.accepted().body(
-        "Fusion job started. jobId=" + jobId
-            + "\nUse GET /api/v1/lipreading/avsr/fuse-files/status/" + jobId + " to fetch status/result.");
+    return ResponseEntity.accepted().body(Map.of(
+        "jobId", jobId,
+        "status", STATUS_QUEUED,
+        "message", "Fusion job started",
+        "statusEndpoint", "/api/v1/lipreading/avsr/fuse-files/status/" + jobId
+    ));
   }
 
   @GetMapping("/avsr/fuse-files/status/{jobId}")
-  public ResponseEntity<Map<String, Object>> fuseFilesStatus(@PathVariable String jobId) {
+  public ResponseEntity<Object> fuseFilesStatus(@PathVariable String jobId) {
     FusionJob job = fusionJobs.get(jobId);
     if (job == null) {
       return ResponseEntity.status(404).body(Map.of(
@@ -191,7 +197,7 @@ public class LipReadingController {
     return buildJobResponse(jobId, job);
   }
 
-  private ResponseEntity<Map<String, Object>> buildJobResponse(String jobId, FusionJob job) {
+  private ResponseEntity<Object> buildJobResponse(String jobId, FusionJob job) {
     if (job == null) {
       return ResponseEntity.status(404).body(Map.of(
           "jobId", jobId,
@@ -204,9 +210,10 @@ public class LipReadingController {
     response.put("status", job.status);
 
     if (STATUS_COMPLETED.equals(job.status)) {
-      response.put("rawOutput", job.rawOutput);
-      response.put("result", job.parsedResult == null ? null : job.parsedResult);
-      return ResponseEntity.ok(response);
+      if (job.parsedResult != null) {
+        return ResponseEntity.ok(job.parsedResult);
+      }
+      return ResponseEntity.ok(job.rawOutput == null ? "" : job.rawOutput.trim());
     }
     if (STATUS_FAILED.equals(job.status)) {
       response.put("error", job.error);
@@ -225,6 +232,21 @@ public class LipReadingController {
     }
     String normalized = message.toLowerCase(Locale.ROOT);
     return normalized.contains("no face detected");
+  }
+
+  private String extractAudioText(JsonNode parsedResult) {
+    if (parsedResult == null) {
+      return null;
+    }
+    JsonNode snake = parsedResult.get("audio_text");
+    if (snake != null && !snake.isNull()) {
+      return snake.asText(null);
+    }
+    JsonNode camel = parsedResult.get("audioText");
+    if (camel != null && !camel.isNull()) {
+      return camel.asText(null);
+    }
+    return null;
   }
 
   private void runFusionJob(String jobId, Path audioTemp, Path videoTemp) {
@@ -341,7 +363,7 @@ public class LipReadingController {
     if (frameCount != null) {
       command.add(String.valueOf(frameCount));
     } else if (fast) {
-      command.add("16");
+      command.add("25");
     }
 
     ProcessBuilder pb = new ProcessBuilder(command);

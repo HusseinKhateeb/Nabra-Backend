@@ -16,8 +16,8 @@ import torchaudio
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
 
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "0")
+os.environ.setdefault("HF_HUB_OFFLINE", "0")
 
 
 def load_audio(audio_path: str):
@@ -64,14 +64,19 @@ def load_audio(audio_path: str):
 
 def load_asr(model_id: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    local_only = os.getenv("AVSR_ASR_LOCAL_ONLY", "0").strip().lower() in {"1", "true", "yes"}
 
     try:
-        processor = Wav2Vec2Processor.from_pretrained(model_id, local_files_only=True)
-        model = Wav2Vec2ForCTC.from_pretrained(model_id, local_files_only=True).to(device)
+        processor = Wav2Vec2Processor.from_pretrained(model_id, local_files_only=local_only)
+        model = Wav2Vec2ForCTC.from_pretrained(model_id, local_files_only=local_only).to(device)
     except Exception as exc:
+        if local_only:
+            raise RuntimeError(
+                "Local-only mode is enabled, but model files were not found in local cache. "
+                "Set AVSR_ASR_LOCAL_ONLY=0 (or unset it) to allow downloading."
+            ) from exc
         raise RuntimeError(
-            "Offline mode is enabled, but model files were not found in local cache. "
-            "Connect to internet once to download the model, then run again offline."
+            "Failed to load ASR model. Check internet access, Hugging Face availability, or model ID."
         ) from exc
     model.eval()
 
@@ -185,6 +190,18 @@ def clean_recognized_text(text: str) -> str:
     return cleaned
 
 
+def normalize_asr_text(raw_text: str) -> str:
+    if not raw_text:
+        return ""
+    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+    if arabic_text:
+        return arabic_text
+    fallback = buckwalter_to_arabic(raw_text).strip()
+    if fallback:
+        return fallback
+    return raw_text.strip()
+
+
 def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -> None:
     try:
         sd = importlib.import_module("sounddevice")
@@ -223,7 +240,7 @@ def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -
 
                 waveform = torch.from_numpy(recording.T)
                 raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
-                arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+                arabic_text = normalize_asr_text(raw_text)
 
                 with output_file.open("a", encoding="utf-8") as f:
                     f.write(arabic_text + "\n")
@@ -262,7 +279,7 @@ def run_mic_once(model_id: str, output_file: Path, duration: float = 2.0, device
 
     waveform = torch.from_numpy(recording.T)
     raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
-    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+    arabic_text = normalize_asr_text(raw_text)
 
     with output_file.open("w", encoding="utf-8") as f:
         f.write(arabic_text + "\n")
@@ -318,7 +335,7 @@ def run_mic_service(model_id: str, duration: float = 2.0, device_id=None) -> Non
 
         waveform = torch.from_numpy(recording.T)
         raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
-        arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
+        arabic_text = normalize_asr_text(raw_text)
 
         output_file.parent.mkdir(parents=True, exist_ok=True)
         with output_file.open("w", encoding="utf-8") as f:
@@ -389,7 +406,7 @@ def main() -> None:
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
     text = transcribe(str(audio_file), args.model)
-    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(text)))
+    arabic_text = normalize_asr_text(text)
 
     output_file = audio_file.with_suffix(".txt")
     output_file.write_text(arabic_text + "\n", encoding="utf-8")

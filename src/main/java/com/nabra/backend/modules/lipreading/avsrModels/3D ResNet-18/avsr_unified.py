@@ -38,6 +38,8 @@ MOUTH_LANDMARKS = [
     78, 191, 80, 81, 82, 13, 312, 311, 310, 415,
     95, 88, 178, 87, 14, 317, 402, 318, 324, 308
 ]
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
 
 
 def get_lip_model(num_classes: int):
@@ -102,6 +104,7 @@ def preprocess_frame(frame, img_size):
     rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
     arr = rgb.astype(np.float32) / 255.0
     arr = np.transpose(arr, (2, 0, 1))  # C, H, W
+    arr = (arr - IMAGENET_MEAN) / IMAGENET_STD
     return arr
 
 

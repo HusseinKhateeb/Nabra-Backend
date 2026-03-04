@@ -38,8 +38,13 @@ except Exception:
 CHECKPOINT_PATH = 'checkpoints/best_model_acc_82.59.pth'
 WORD_MAP_PATH = 'checkpoints/word_to_idx.json'
 ASR_SCRIPT_PATH = '../audio model/test_asr_ctc.py'
-# Update to absolute path for .venv python
-ASR_VENV_PYTHON = 'D:/Graduation Extra/Nabra Workspace/.venv/Scripts/python.exe'
+ASR_VENV_PYTHON = os.getenv("AVSR_ASR_PYTHON", "")
+ASR_PYTHON_CANDIDATES = [
+    ASR_VENV_PYTHON,
+    str((Path(__file__).resolve().parent.parent / "audio model" / ".venv" / "Scripts" / "python.exe")),
+    "D:/Graduation Extra/Nabra Workspace/.venv/Scripts/python.exe",
+    sys.executable,
+]
 
 MOUTH_LANDMARKS = [
     61, 185, 40, 39, 37, 0, 267, 269, 270, 409,
@@ -54,6 +59,24 @@ _CACHED_IDX_TO_WORD = None
 _CACHED_FACE_DETECTOR = None
 _FUSION_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 DEFAULT_FRAME_COUNT = max(8, int(os.getenv("AVSR_FRAME_COUNT", "25")))
+ASR_SUBPROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("AVSR_ASR_TIMEOUT_SECONDS", "180")))
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
+
+
+def fallback_mouth_crop(frame):
+    if frame is None or frame.size == 0:
+        return None
+    h, w = frame.shape[:2]
+    if h < 40 or w < 40:
+        return None
+    x1 = max(int(w * 0.25), 0)
+    x2 = min(int(w * 0.75), w)
+    y1 = max(int(h * 0.55), 0)
+    y2 = min(int(h * 0.95), h)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return frame[y1:y2, x1:x2]
 
 
 def get_face_detector():
@@ -106,11 +129,12 @@ def get_lip_model(num_classes):
 
 def extract_mouth_frames(video_path, img_size=112, frame_count=25):
     cap = cv2.VideoCapture(str(video_path))
-    frames = []
+    candidates = []
     detector = get_face_detector()
     detected_face_frames = 0
+    last_good_mouth = None
 
-    while len(frames) < frame_count:
+    while True:
         ret, frame = cap.read()
         if not ret:
             break
@@ -136,15 +160,36 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
                         mouth = frame[y1:y2, x1:x2]
             except Exception:
                 pass
-        if mouth is None:
-            mouth = frame
+        if mouth is not None and mouth.size > 0:
+            last_good_mouth = mouth
+        elif detector and last_good_mouth is not None:
+            mouth = last_good_mouth
+        elif not detector:
+            mouth = fallback_mouth_crop(frame)
+
+        if mouth is None or mouth.size == 0:
+            continue
+
         mouth_resized = cv2.resize(mouth, (160, 100), interpolation=cv2.INTER_CUBIC)
         resized = cv2.resize(mouth_resized, (img_size, img_size), interpolation=cv2.INTER_CUBIC)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         arr = rgb.astype(np.float32) / 255.0
+        arr = (arr - IMAGENET_MEAN.transpose(1, 2, 0)) / IMAGENET_STD.transpose(1, 2, 0)
         arr = np.transpose(arr, (2, 0, 1))
-        frames.append(arr)
+        candidates.append(arr)
     cap.release()
+
+    if not candidates:
+        return [], detected_face_frames, detector is not None
+
+    if len(candidates) >= frame_count:
+        start = (len(candidates) - frame_count) // 2
+        frames = candidates[start:start + frame_count]
+    else:
+        frames = list(candidates)
+        while len(frames) < frame_count:
+            frames.append(frames[-1])
+
     return frames, detected_face_frames, detector is not None
 
 def predict_lip(model, frames, device, idx_to_word, top_k=5):
@@ -163,15 +208,19 @@ def run_asr(audio_path):
     logging.basicConfig(filename='avsr_batch_fusion.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
     logging.debug(f"ASR audio_path: {audio_path}")
     logging.debug(f"ASR script path: {ASR_SCRIPT_PATH}")
+    python_exec = next((candidate for candidate in ASR_PYTHON_CANDIDATES if candidate and Path(candidate).exists()), sys.executable)
+    logging.debug(f"ASR python exec: {python_exec}")
     try:
         result = subprocess.run([
-            ASR_VENV_PYTHON,
+            python_exec,
             ASR_SCRIPT_PATH,
             str(audio_path)
-        ], capture_output=True, text=True, encoding='utf-8', timeout=30)
+        ], capture_output=True, text=True, encoding='utf-8', timeout=ASR_SUBPROCESS_TIMEOUT_SECONDS)
         logging.debug(f"ASR stdout: {result.stdout}")
         logging.debug(f"ASR stderr: {result.stderr}")
         logging.debug(f"ASR returncode: {result.returncode}")
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ASR exited with code {result.returncode}")
         return result.stdout.strip()
     except Exception as e:
         logging.error(f"ASR subprocess error: {e}")
@@ -269,7 +318,7 @@ def run_fusion(audio_path, video_path, frame_count=None):
     if face_detection_enabled and detected_face_frames == 0:
         raise RuntimeError("No face detected in video frames")
     lip_word, lip_conf, lip_top = predict_lip(_CACHED_MODEL, frames, _CACHED_DEVICE, _CACHED_IDX_TO_WORD)
-    asr_output = asr_future.result(timeout=35)
+    asr_output = asr_future.result(timeout=ASR_SUBPROCESS_TIMEOUT_SECONDS + 20)
     audio_text = extract_audio_text(asr_output)
     fused_word, fused_conf, fusion_reason = fuse(audio_text, lip_top)
     return {

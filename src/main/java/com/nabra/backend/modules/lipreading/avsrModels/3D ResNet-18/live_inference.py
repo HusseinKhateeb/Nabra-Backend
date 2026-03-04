@@ -38,6 +38,8 @@ MOUTH_LANDMARKS = [
     78, 191, 80, 81, 82, 13, 312, 311, 310, 415,
     95, 88, 178, 87, 14, 317, 402, 318, 324, 308
 ]
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
 
 
 def load_word_map(word_to_idx_path: Path):
@@ -103,6 +105,7 @@ def preprocess_frame(frame, img_size):
     arr = rgb.astype(np.float32) / 255.0
     # Convert to (C, H, W) (exactly as training)
     arr = np.transpose(arr, (2, 0, 1))
+    arr = (arr - IMAGENET_MEAN) / IMAGENET_STD
     return arr
 
 

@@ -37,7 +37,7 @@ def main():
                 continue
 
             if frame_count is None and fast:
-                frame_count = 16
+                frame_count = 25
 
             result = run_fusion(audio_path, video_path, frame_count=frame_count)
             raw_output = json.dumps(result, ensure_ascii=False, indent=2)
