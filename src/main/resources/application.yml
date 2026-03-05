@@ -1,22 +1,36 @@
 spring:
   application:
     name: nabra-backend
+
   datasource:
     url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
     # username: postgres
     # password: WKAB8lzpixs8i4SL
   jpa:
     hibernate:
-      ddl-auto: update  # for scaffold/dev; use migrations in production
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+
   jackson:
     time-zone: UTC
   servlet:
     multipart:
       max-file-size: -1
       max-request-size: -1
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: odehteam935@gmail.com
+    password: towdnaeenrkzeuhi
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   port: 8080
@@ -27,11 +41,16 @@ server:
 app:
   security:
     jwt:
-      # IMPORTANT: set a long, random secret in production (min 32 chars)
       secret: "change-me-change-me-change-me-change-me"
       expirationSeconds: 86400
+
+  frontend:
+    allowedOrigins:
+      - "http://localhost:3000"
+      - "http://localhost:3001"
+      - "http://localhost:4200"
+
   ai:
-    # Optional microservices, enable by setting baseUrl(s)
     lipreading:
       baseUrl: ""
     prediction:
@@ -60,3 +79,7 @@ lip:
   command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
 audio:
   command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
+# ✅ Google OAuth (هام)
+google:
+  oauth:
+    client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
