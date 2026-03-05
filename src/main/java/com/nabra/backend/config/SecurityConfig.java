@@ -5,6 +5,7 @@ import com.nabra.backend.security.principal.DbUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -18,7 +19,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.http.HttpMethod;
 
 @Configuration
 @EnableMethodSecurity
@@ -69,19 +69,23 @@ public class SecurityConfig {
             sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
         )
         .authorizeHttpRequests(auth -> auth
-            // ⭐⭐ هذا السطر يحل المشكلة ⭐⭐
+            // ⭐⭐ السماح لطلبات OPTIONS (CORS) ⭐⭐
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
+            
+            // ✅ السماح للفيديوهات (STATIC FILES)
+            .requestMatchers("/videos/**").permitAll()
+            
+            // ✅ endpoints بدون توكن
             .requestMatchers(
                 "/api/v1/auth/**",
+                "/api/v1/auth/google",
                 "/v3/api-docs/**",
                 "/swagger-ui/**",
                 "/swagger-ui.html",
-                "/api/v1/auth/google",
-
                 "/actuator/health/**"
             ).permitAll()
-
+            
+            // 🔒 أي شيء آخر محمي
             .anyRequest().authenticated()
         )
         .addFilterBefore(

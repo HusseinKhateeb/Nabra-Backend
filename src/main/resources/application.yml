@@ -32,6 +32,20 @@ spring:
           starttls:
             enable: true
 
+  # ✅ مهم لتشغيل الملفات (فيديوهات) من المسار الفعلي
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - file:C:/nabra/uploads/
+
+  # ✅ إعدادات رفع الملفات
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 200MB
+      max-request-size: 200MB
+
 server:
   port: 8080
   tomcat:
@@ -69,11 +83,13 @@ app:
       topK: 5
       timeoutSeconds: 60
 
-# logging:
-#   file:
-#     name: spring.log
-#   level:
-#     root: DEBUG
+  # ✅ المسار الحقيقي لحفظ الفيديوهات
+  upload:
+    video-path: C:/nabra/uploads/videos/
+
+logging:
+  level:
+    org.hibernate.SQL: debug
 
 lip:
   command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
@@ -83,3 +99,4 @@ audio:
 google:
   oauth:
     client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
+
