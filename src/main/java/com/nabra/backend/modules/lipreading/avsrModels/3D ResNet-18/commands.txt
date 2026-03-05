@@ -1,0 +1,13 @@
+
+.\.venv-win\Scripts\python.exe live_inference.py --checkpoint checkpoints/best_model_acc_82.59.pth --use_mediapipe --display --predict_count 5
+
+
+# Main command (top-5 predictions)
+.\.venv-win\Scripts\python.exe live_inference.py --checkpoint checkpoints/best_model_acc_82.59.pth --use_mediapipe --display --top_k 5
+
+# Faster command (top-3 predictions)
+.\.venv-win\Scripts\python.exe live_inference.py --checkpoint checkpoints/best_model_acc_82.59.pth --use_mediapipe --display --top_k 3
+
+# If .venv-win is not activated/available and global python has deps
+python live_inference.py --checkpoint checkpoints/best_model_acc_82.59.pth --use_mediapipe --display --top_k 5
+

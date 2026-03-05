@@ -3,10 +3,9 @@ spring:
     name: nabra-backend
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/nabra
-    username: postgres
-    password: MST
-
+    url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
+    # username: postgres
+    # password: WKAB8lzpixs8i4SL
   jpa:
     hibernate:
       ddl-auto: update
@@ -16,6 +15,10 @@ spring:
 
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
 
   mail:
     host: smtp.gmail.com
@@ -45,6 +48,9 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    connection-timeout: 60000 # 60 seconds
+    max-swallow-size: -1
 
 app:
   security:
@@ -65,6 +71,17 @@ app:
       baseUrl: ""
     stt:
       baseUrl: ""
+    avsr:
+      pythonCommand: "python"
+      # Optional env var: AVSR_ASR_TIMEOUT_SECONDS (default 180)
+      # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py --video {video} --top-k {topK}"
+      lip:
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+      # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py {audio}"
+      audio:
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
+      topK: 5
+      timeoutSeconds: 60
 
   # ✅ المسار الحقيقي لحفظ الفيديوهات
   upload:
@@ -74,6 +91,10 @@ logging:
   level:
     org.hibernate.SQL: debug
 
+lip:
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+audio:
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
 # ✅ Google OAuth (هام)
 google:
   oauth:

@@ -10,7 +10,7 @@
 
 # VS Code
 .vscode/
-
+ 
 # AVSR model artifacts 
 src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/checkpoints/*.pth 
 src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/checkpoints/*.pt 

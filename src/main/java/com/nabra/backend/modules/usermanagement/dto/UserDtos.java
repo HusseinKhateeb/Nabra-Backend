@@ -55,4 +55,31 @@ public class UserDtos {
       Double fontScale,
       Boolean vibrationEnabled
   ) {}
+
+  /** Settings Response - الإعدادات العامة والخصوصية */
+  public record UserSettingsResponse(
+      String userId,
+      String preferredLanguage,
+      boolean highContrastEnabled,
+      double fontScale,
+      boolean vibrationEnabled,
+      boolean publicProfile,
+      boolean showContactInfo,
+      boolean allowNotifications,
+      boolean allowDataCollection,
+      String dataCollectionLevel
+  ) {}
+
+  /** Update Settings Request */
+  public record UpdateSettingsRequest(
+      String preferredLanguage,
+      Boolean highContrastEnabled,
+      Double fontScale,
+      Boolean vibrationEnabled,
+      Boolean publicProfile,
+      Boolean showContactInfo,
+      Boolean allowNotifications,
+      Boolean allowDataCollection,
+      String dataCollectionLevel
+  ) {}
 }

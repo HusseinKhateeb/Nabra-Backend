@@ -93,6 +93,22 @@ public class User extends BaseEntity {
   @Column(nullable = false)
   private Double accuracy = 0.0;
 
+  /** User Settings - Privacy & Preferences */
+  @Column(nullable = false)
+  private boolean publicProfile = true;
+
+  @Column(nullable = false)
+  private boolean showContactInfo = false;
+
+  @Column(nullable = false)
+  private boolean allowNotifications = true;
+
+  @Column(nullable = false)
+  private boolean allowDataCollection = true;
+
+  @Column(length = 20)
+  private String dataCollectionLevel = "basic";
+
   /**
    * Blocking relation: if A blocks B, then B should not be able to message A.
    */
