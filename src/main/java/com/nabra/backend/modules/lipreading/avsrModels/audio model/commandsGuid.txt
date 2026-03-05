@@ -1,0 +1,3 @@
+"D:/Graduation Extra/audio model/.venv/Scripts/python.exe" test_asr_ctc.py --realtimep
+
+"D:/Graduation Extra/audio model/.venv/Scripts/python.exe" test_asr_ctc.py && echo __DONE__ && type test3.txt

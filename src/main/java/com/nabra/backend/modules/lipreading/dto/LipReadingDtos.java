@@ -5,6 +5,8 @@ import com.nabra.backend.common.model.Enums.SessionOutputType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.List;
+
 public class LipReadingDtos {
 
   /**
@@ -22,4 +24,27 @@ public class LipReadingDtos {
       String synthesizedAudioUrl,
       Double confidence
   ) {}
+
+    public record AvsrTopPrediction(
+      @NotBlank String word,
+      @NotNull Double confidence
+    ) {}
+
+    public record AvsrFusionRequest(
+      String audioText,
+      List<AvsrTopPrediction> lipTopPredictions,
+      String videoPath,
+      String audioPath,
+      Integer topK
+    ) {}
+
+    public record AvsrFusionResponse(
+      String finalWord,
+      String matchedLipWord,
+      String audioText,
+      Double similarity,
+      Double lipConfidence,
+      List<AvsrTopPrediction> lipTopPredictions,
+      String fusionReason
+    ) {}
 }
