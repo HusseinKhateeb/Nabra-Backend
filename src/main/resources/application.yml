@@ -40,11 +40,11 @@ spring:
         - file:C:/nabra/uploads/
 
   # ✅ إعدادات رفع الملفات
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 200MB
-      max-request-size: 200MB
+servlet:
+  multipart:
+    enabled: true
+    max-file-size: 200MB
+    max-request-size: 200MB
 
 server:
   port: 8080
