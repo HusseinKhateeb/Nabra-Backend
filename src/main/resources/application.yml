@@ -17,8 +17,9 @@ spring:
     time-zone: UTC
   servlet:
     multipart:
-      max-file-size: -1
-      max-request-size: -1
+      enabled: true
+      max-file-size: 200MB
+      max-request-size: 200MB
 
   mail:
     host: smtp.gmail.com
@@ -39,17 +40,15 @@ spring:
         - classpath:/static/
         - file:C:/nabra/uploads/
 
-  # ✅ إعدادات رفع الملفات
-servlet:
-  multipart:
-    enabled: true
-    max-file-size: 200MB
-    max-request-size: 200MB
+  mvc:
+    async:
+      request-timeout: 300000
 
 server:
   port: 8080
   tomcat:
-    connection-timeout: 60000 # 60 seconds
+    connection-timeout: 300000 # 5 minutes for slow mobile multipart uploads
+    keep-alive-timeout: 300000
     max-swallow-size: -1
 
 app:
@@ -90,6 +89,8 @@ app:
 logging:
   level:
     org.hibernate.SQL: debug
+    org.springframework.security: TRACE
+    org.springframework.web: DEBUG
 
 lip:
   command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
