@@ -36,4 +36,11 @@ public class ChatController {
         chatService.listForUser(p.getUserId(), pageable)
     );
   }
+
+  @DeleteMapping("/{chatId}")
+  public ResponseEntity<Void> delete(@PathVariable("chatId") String chatId) {
+    var p = SecurityUtils.currentPrincipal();
+    chatService.delete(p.getUserId(), chatId);
+    return ResponseEntity.noContent().build();
+  }
 }

@@ -121,6 +121,18 @@ public class ChatService {
         .map(chat -> toDto(chat, userId));
   }
 
+  @Transactional
+  public void delete(String requesterUserId, String chatId) {
+    Chat chat = getChat(chatId);
+
+    if (!isParticipant(chat, requesterUserId)) {
+      throw new IllegalArgumentException("Not a participant in this chat");
+    }
+
+    messageRepository.deleteAllByChatId(chatId);
+    chatRepository.delete(chat);
+  }
+
   // يُستخدم من MessageService
   public void save(Chat chat) {
     chatRepository.save(chat);

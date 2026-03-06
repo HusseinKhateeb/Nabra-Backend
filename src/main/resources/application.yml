@@ -69,7 +69,7 @@ app:
     prediction:
       baseUrl: ""
     stt:
-      baseUrl: ""
+      baseUrl: "http://localhost:5000" # TODO: Set to your actual Whisper backend URL
     avsr:
       pythonCommand: "python"
       # Optional env var: AVSR_ASR_TIMEOUT_SECONDS (default 180)

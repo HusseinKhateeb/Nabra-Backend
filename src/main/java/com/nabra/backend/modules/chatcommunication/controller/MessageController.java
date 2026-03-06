@@ -19,6 +19,7 @@ public class MessageController {
 
   private final MessageService messageService;
 
+
 @PostMapping
 public ResponseEntity<MessageDtos.MessageResponse> send(
     @PathVariable("chatId") String chatId,
@@ -29,6 +30,20 @@ public ResponseEntity<MessageDtos.MessageResponse> send(
     return ResponseEntity.ok(
         messageService.send(p.getUserId(), chatId, req, preferredLanguage)
     );
+}
+
+/**
+ * Transcribe a message in a chat.
+ */
+@PostMapping("/{messageId}/transcribe")
+public ResponseEntity<?> transcribeMessage(
+        @PathVariable("chatId") String chatId,
+        @PathVariable("messageId") String messageId
+) {
+    var p = SecurityUtils.currentPrincipal();
+    // TODO: Implement actual transcription logic in MessageService
+    Object result = messageService.transcribeMessage(p.getUserId(), chatId, messageId);
+    return ResponseEntity.ok(result);
 }
 
 @GetMapping

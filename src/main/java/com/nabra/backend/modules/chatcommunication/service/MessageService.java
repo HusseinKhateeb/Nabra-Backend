@@ -157,4 +157,39 @@ public class MessageService {
       messageRepository.bulkUpdateStatus(ids, DeliveryStatus.READ);
     }
   }
+  /**
+   * Transcribe a message by its ID in a chat.
+   */
+  @Transactional
+  public MessageDtos.MessageResponse transcribeMessage(String userId, String chatId, String messageId) {
+    Chat chat = chatService.getChat(chatId);
+    if (!chatService.isParticipant(chat, userId)) {
+      throw new IllegalArgumentException("Not a participant in this chat");
+    }
+
+    Message message = messageRepository.findById(messageId)
+      .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+
+    if (!message.getChat().getId().equals(chatId)) {
+      throw new IllegalArgumentException("Message does not belong to this chat");
+    }
+
+    if (message.getType() != MessageType.VOICE) {
+      throw new IllegalArgumentException("Transcription is only available for voice messages");
+    }
+
+    String transcript = message.getVoiceTranscript();
+    if (transcript == null || transcript.isBlank()) {
+      String mediaUrl = message.getMediaUrl();
+      if (mediaUrl == null || mediaUrl.isBlank()) {
+        throw new IllegalArgumentException("No media URL available for transcription");
+      }
+      // You may want to use the user's preferred language if available
+      transcript = voiceToTextService.transcribe(mediaUrl, null);
+      message.setVoiceTranscript(transcript);
+      messageRepository.saveAndFlush(message);
+    }
+
+    return toDto(message);
+  }
 }
