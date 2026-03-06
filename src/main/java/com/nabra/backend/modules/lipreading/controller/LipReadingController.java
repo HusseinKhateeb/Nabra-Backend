@@ -592,26 +592,66 @@ public class LipReadingController {
       if (resultText == null && job.rawOutput != null) {
         resultText = job.rawOutput.trim();
       }
+      Double accuracyScore = extractFusionConfidence(job.parsedResult);
+      String content = buildAvsrHistoryContent(job, ex);
       saveCompletedSession(
           job.userId,
           SessionInputType.RECORDED,
           SessionOutputType.TEXT,
           resultText,
           null,
-          null,
-          "AVSR fuse-files completed"
+          accuracyScore,
+          content
       );
       return;
     }
 
     String error = ex != null ? ex.getMessage() : job.error;
+    String content = buildAvsrHistoryContent(job, ex);
     saveFailedSession(
         job.userId,
         SessionInputType.RECORDED,
         SessionOutputType.TEXT,
         error,
-        "AVSR fuse-files failed"
+        content
     );
+  }
+
+  private Double extractFusionConfidence(JsonNode parsedResult) {
+    if (parsedResult == null) {
+      return null;
+    }
+
+    JsonNode fused = parsedResult.get("fused_conf");
+    if (fused != null && fused.isNumber()) {
+      return fused.asDouble();
+    }
+
+    JsonNode lip = parsedResult.get("lip_conf");
+    if (lip != null && lip.isNumber()) {
+      return lip.asDouble();
+    }
+
+    return null;
+  }
+
+  private String buildAvsrHistoryContent(FusionJob job, Exception ex) {
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("source", "avsr");
+    payload.put("status", job == null ? null : job.status);
+
+    if (job != null && job.parsedResult != null) {
+      payload.put("result", job.parsedResult);
+    } else if (job != null && job.rawOutput != null && !job.rawOutput.isBlank()) {
+      payload.put("rawOutput", job.rawOutput.trim());
+    }
+
+    String error = ex != null ? ex.getMessage() : (job == null ? null : job.error);
+    if (error != null && !error.isBlank()) {
+      payload.put("error", error);
+    }
+
+    return jsonToCompactString(OBJECT_MAPPER.valueToTree(payload));
   }
 
   private String extractFusionResultText(JsonNode parsedResult) {

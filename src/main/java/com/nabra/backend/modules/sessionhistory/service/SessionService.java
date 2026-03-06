@@ -1,5 +1,7 @@
 package com.nabra.backend.modules.sessionhistory.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nabra.backend.common.exception.BadRequestException;
 import com.nabra.backend.common.exception.ForbiddenException;
 import com.nabra.backend.common.exception.NotFoundException;
@@ -25,6 +27,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SessionService {
 
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
   private final SessionRepository sessionRepository;
   private final UserService userService;
 
@@ -43,8 +47,22 @@ public class SessionService {
         s.getAccuracyScore(),
         s.getDeviceInfo(),
         s.getModelVersion(),
-        s.getIsOffline()
+        s.getIsOffline(),
+        parseContentNode(s.getContent())
     );
+  }
+
+  private JsonNode parseContentNode(String content) {
+    if (content == null || content.isBlank()) {
+      return null;
+    }
+
+    try {
+      return OBJECT_MAPPER.readTree(content);
+    } catch (Exception ignored) {
+      // Keep backward compatibility for old plain-text content rows.
+      return OBJECT_MAPPER.createObjectNode().put("text", content);
+    }
   }
 
   @Transactional
@@ -176,6 +194,20 @@ public class SessionService {
     if (maxDuration.isPresent()) {
       spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("durationSeconds"), maxDuration.get()));
     }
+
+    return sessionRepository.findAll(spec, pageable).map(this::toDto);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<SessionDtos.SessionResponse> listAvsrHistory(String requesterUserId, String targetUserId, Pageable pageable) {
+    if (!requesterUserId.equals(targetUserId)) {
+      throw new ForbiddenException("You do not have permission to view this user's sessions");
+    }
+
+    Specification<Session> spec = (root, query, cb) -> cb.and(
+        cb.equal(root.get("user").get("id"), targetUserId),
+        cb.like(cb.lower(cb.coalesce(root.get("content"), "")), "%avsr%")
+    );
 
     return sessionRepository.findAll(spec, pageable).map(this::toDto);
   }

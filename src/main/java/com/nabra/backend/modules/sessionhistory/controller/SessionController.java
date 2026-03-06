@@ -56,19 +56,19 @@ public class SessionController {
   @GetMapping
   public ResponseEntity<Page<SessionDtos.SessionResponse>> list(
       @Parameter(description = "Filter: from (inclusive) ISO instant")
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> from,
       @Parameter(description = "Filter: to (inclusive) ISO instant")
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> to,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Optional<Instant> to,
       @Parameter(description = "Filter: status ACTIVE|COMPLETED|FAILED")
-      @RequestParam Optional<String> status,
+      @RequestParam(required = false) Optional<String> status,
       @Parameter(description = "Filter: outputType TEXT|VOICE")
-      @RequestParam Optional<String> outputType,
+      @RequestParam(required = false) Optional<String> outputType,
       @Parameter(description = "Filter: keyword search in result text")
-      @RequestParam Optional<String> keyword,
+      @RequestParam(required = false) Optional<String> keyword,
       @Parameter(description = "Filter: minimum duration in seconds")
-      @RequestParam Optional<Long> minDuration,
+      @RequestParam(required = false) Optional<Long> minDuration,
       @Parameter(description = "Filter: maximum duration in seconds")
-      @RequestParam Optional<Long> maxDuration,
+      @RequestParam(required = false) Optional<Long> maxDuration,
         @PageableDefault(sort = "startedAt", direction = Sort.Direction.DESC)
       Pageable pageable
   ) {
@@ -97,7 +97,7 @@ public class SessionController {
   @DeleteMapping
   public ResponseEntity<Void> deleteAll(
       @Parameter(description = "Confirmation flag to prevent accidental deletion")
-      @RequestParam(required = false, defaultValue = "false") boolean confirm
+      @RequestParam(name = "confirm", required = false, defaultValue = "false") boolean confirm
   ) {
     if (!confirm) {
       return ResponseEntity.badRequest().build();

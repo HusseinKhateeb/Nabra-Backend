@@ -3,6 +3,7 @@ package com.nabra.backend.modules.sessionhistory.dto;
 import com.nabra.backend.common.model.Enums.SessionInputType;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
@@ -40,6 +41,7 @@ public class SessionDtos {
       Double accuracyScore,
       String deviceInfo,
       String modelVersion,
-      Boolean isOffline
+      Boolean isOffline,
+            JsonNode content
   ) {}
 }
