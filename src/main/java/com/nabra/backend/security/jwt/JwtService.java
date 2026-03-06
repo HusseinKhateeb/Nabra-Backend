@@ -25,16 +25,19 @@ public class JwtService {
   public String generateToken(String userId, String username, String role) {
     Instant now = Instant.now();
     return Jwts.builder()
-        .setSubject(userId)
+        .subject(userId)
         .claim("username", username)
         .claim("role", role)
-        .setIssuedAt(Date.from(now))
-        .setExpiration(Date.from(now.plusSeconds(expirationSeconds)))
-        .signWith(key, SignatureAlgorithm.HS256)
+        .issuedAt(Date.from(now))
+        .expiration(Date.from(now.plusSeconds(expirationSeconds)))
+        .signWith(key)
         .compact();
   }
 
   public Jws<Claims> parse(String token) {
-    return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+    return Jwts.parser()
+        .setSigningKey(key)
+        .build()
+        .parseClaimsJws(token);
   }
 }

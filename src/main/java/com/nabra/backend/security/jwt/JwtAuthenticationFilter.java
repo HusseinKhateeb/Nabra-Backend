@@ -40,7 +40,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     try {
       Jws<Claims> jws = jwtService.parse(token);
-      String userId = jws.getBody().getSubject();
+      String userId = jws.getPayload().getSubject();
 
       if (userId != null &&
           SecurityContextHolder.getContext().getAuthentication() == null) {
