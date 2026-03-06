@@ -4,6 +4,7 @@ import com.nabra.backend.common.model.BaseEntity;
 import com.nabra.backend.common.model.Enums.SessionInputType;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
+import com.nabra.backend.common.model.Enums.SessionType;
 import com.nabra.backend.modules.usermanagement.model.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -20,6 +21,11 @@ import java.time.Instant;
 @Getter
 @Setter
 public class Session extends BaseEntity {
+
+  /** Session module source (lip reading, chat, voice-to-text, etc.). */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "session_type", nullable = false, length = 20)
+  private SessionType sessionType = SessionType.LIP_READING;
 
   @ManyToOne(optional = false, fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", nullable = false)
@@ -72,4 +78,8 @@ public class Session extends BaseEntity {
   /** Generic content field for future extensibility. */
   @Column(length = 5000)
   private String content;
+
+  /** Optional external reference ID related to this session content. */
+  @Column(name = "content_ref_id", length = 100)
+  private String contentRefId;
 }

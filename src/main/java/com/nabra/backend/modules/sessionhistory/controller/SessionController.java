@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -67,6 +69,7 @@ public class SessionController {
       @RequestParam Optional<Long> minDuration,
       @Parameter(description = "Filter: maximum duration in seconds")
       @RequestParam Optional<Long> maxDuration,
+        @PageableDefault(sort = "startedAt", direction = Sort.Direction.DESC)
       Pageable pageable
   ) {
     var p = SecurityUtils.currentPrincipal();

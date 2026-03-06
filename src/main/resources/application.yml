@@ -3,8 +3,9 @@ spring:
     name: nabra-backend
 
   datasource:
-     url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
-
+    url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
+    # username: postgres
+    # password: WKAB8lzpixs8i4SL
   jpa:
     hibernate:
       ddl-auto: update
@@ -14,6 +15,11 @@ spring:
 
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 200MB
+      max-request-size: 200MB
 
   mail:
     host: smtp.gmail.com
@@ -27,8 +33,23 @@ spring:
           starttls:
             enable: true
 
+  # ✅ مهم لتشغيل الملفات (فيديوهات) من المسار الفعلي
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - file:C:/nabra/uploads/
+
+  mvc:
+    async:
+      request-timeout: 300000
+
 server:
-  port: 8081
+  port: 8080
+  tomcat:
+    connection-timeout: 300000 # 5 minutes for slow mobile multipart uploads
+    keep-alive-timeout: 300000
+    max-swallow-size: -1
 
 app:
   security:
@@ -49,12 +70,34 @@ app:
       baseUrl: ""
     stt:
       baseUrl: ""
+    avsr:
+      pythonCommand: "python"
+      # Optional env var: AVSR_ASR_TIMEOUT_SECONDS (default 180)
+      # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py --video {video} --top-k {topK}"
+      lip:
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+      # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py {audio}"
+      audio:
+        command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
+      topK: 5
+      timeoutSeconds: 60
+
+  # ✅ المسار الحقيقي لحفظ الفيديوهات
+  upload:
+    video-path: C:/nabra/uploads/videos/
 
 logging:
   level:
     org.hibernate.SQL: debug
+    org.springframework.security: TRACE
+    org.springframework.web: DEBUG
 
+lip:
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
+audio:
+  command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
 # ✅ Google OAuth (هام)
 google:
   oauth:
     client-id: "839005087126-rc1kc0ujab07u2njkcc2ara0pcvcj3qh.apps.googleusercontent.com"
+

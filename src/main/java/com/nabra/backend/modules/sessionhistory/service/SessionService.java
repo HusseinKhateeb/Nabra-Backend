@@ -3,6 +3,7 @@ package com.nabra.backend.modules.sessionhistory.service;
 import com.nabra.backend.common.exception.BadRequestException;
 import com.nabra.backend.common.exception.ForbiddenException;
 import com.nabra.backend.common.exception.NotFoundException;
+import com.nabra.backend.common.model.Enums.SessionInputType;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
 import com.nabra.backend.modules.sessionhistory.dto.SessionDtos;
@@ -177,6 +178,62 @@ public class SessionService {
     }
 
     return sessionRepository.findAll(spec, pageable).map(this::toDto);
+  }
+
+  @Transactional
+  public SessionDtos.SessionResponse recordCompleted(
+      String userId,
+      SessionInputType inputType,
+      SessionOutputType outputType,
+      String resultText,
+      String resultAudioUrl,
+      Double accuracyScore,
+      String content
+  ) {
+    User user = userService.getById(userId);
+    Instant now = Instant.now();
+
+    Session s = new Session();
+    s.setUser(user);
+    s.setInputType(inputType);
+    s.setOutputType(outputType);
+    s.setStatus(SessionStatus.COMPLETED);
+    s.setStartedAt(now);
+    s.setEndedAt(now);
+    s.setDurationSeconds(0L);
+    s.setResultText(resultText);
+    s.setResultAudioUrl(resultAudioUrl);
+    s.setAccuracyScore(accuracyScore);
+    s.setContent(content);
+
+    sessionRepository.save(s);
+    return toDto(s);
+  }
+
+  @Transactional
+  public SessionDtos.SessionResponse recordFailed(
+      String userId,
+      SessionInputType inputType,
+      SessionOutputType outputType,
+      String errorText,
+      String content
+  ) {
+    User user = userService.getById(userId);
+    Instant now = Instant.now();
+
+    Session s = new Session();
+    s.setUser(user);
+    s.setInputType(inputType);
+    s.setOutputType(outputType);
+    s.setStatus(SessionStatus.FAILED);
+    s.setStartedAt(now);
+    s.setEndedAt(now);
+    s.setDurationSeconds(0L);
+    s.setResultText(errorText);
+    s.setContent(content);
+
+    sessionRepository.save(s);
+    return toDto(s);
   }
 }
 
