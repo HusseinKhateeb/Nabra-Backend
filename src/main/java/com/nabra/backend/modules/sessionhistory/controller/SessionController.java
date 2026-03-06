@@ -34,7 +34,7 @@ public class SessionController {
 
   @PostMapping("/{sessionId}/stop")
   public ResponseEntity<SessionDtos.SessionResponse> stop(
-      @PathVariable String sessionId,
+      @PathVariable("sessionId") String sessionId,
       @Valid @RequestBody SessionDtos.StopSessionRequest req
   ) {
     var p = SecurityUtils.currentPrincipal();
@@ -45,7 +45,7 @@ public class SessionController {
    * Get a single session by ID. User can only view their own sessions.
    */
   @GetMapping("/{sessionId}")
-  public ResponseEntity<SessionDtos.SessionResponse> getById(@PathVariable String sessionId) {
+  public ResponseEntity<SessionDtos.SessionResponse> getById(@PathVariable("sessionId") String sessionId) {
     var p = SecurityUtils.currentPrincipal();
     return ResponseEntity.ok(sessionService.getById(p.getUserId(), sessionId));
   }
@@ -84,7 +84,7 @@ public class SessionController {
    * Delete a single session by ID. User can only delete their own sessions.
    */
   @DeleteMapping("/{sessionId}")
-  public ResponseEntity<Void> delete(@PathVariable String sessionId) {
+  public ResponseEntity<Void> delete(@PathVariable("sessionId") String sessionId) {
     var p = SecurityUtils.currentPrincipal();
     sessionService.deleteById(p.getUserId(), sessionId);
     return ResponseEntity.noContent().build();
