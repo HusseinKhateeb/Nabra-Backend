@@ -66,14 +66,8 @@ public class MessageService {
     m.setDeliveryStatus(DeliveryStatus.SENT);
 
     if (req.type() == MessageType.VOICE) {
-      String transcript = req.voiceTranscript();
-      if ((transcript == null || transcript.isBlank())
-          && req.mediaUrl() != null
-          && !req.mediaUrl().isBlank()) {
-        transcript =
-            voiceToTextService.transcribe(req.mediaUrl(), preferredLanguage);
-      }
-      m.setVoiceTranscript(transcript);
+      // Only set transcript if provided, do not transcribe
+      m.setVoiceTranscript(req.voiceTranscript());
     } else {
       m.setVoiceTranscript(req.voiceTranscript());
     }

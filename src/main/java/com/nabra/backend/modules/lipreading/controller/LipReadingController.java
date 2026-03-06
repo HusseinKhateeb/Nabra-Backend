@@ -45,6 +45,14 @@ import java.nio.file.Path;
 @RequiredArgsConstructor
 @Tag(name = "Lip Reading")
 public class LipReadingController {
+    // Persistent audio worker fields
+    private static final String AUDIO_WORK_DIR = "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model";
+    private static final String AUDIO_WORKER_SCRIPT = "audio_worker.py";
+    private final Object audioWorkerLock = new Object();
+    private volatile Process audioWorkerProcess;
+    private volatile java.io.BufferedWriter audioWorkerStdin;
+    private volatile java.io.BufferedReader audioWorkerStdout;
+
   private static final String STATUS_QUEUED = "QUEUED";
   private static final String STATUS_PROCESSING = "PROCESSING";
   private static final String STATUS_COMPLETED = "COMPLETED";
@@ -531,12 +539,83 @@ public class LipReadingController {
       audioTemp = Files.createTempFile("avsr-audio-", extensionOf(audioFile.getOriginalFilename()));
       audioFile.transferTo(audioTemp);
 
-      // TODO: Process audio file as needed
-      return ResponseEntity.ok("Audio uploaded: " + audioTemp.toAbsolutePath());
+      // Use persistent audio worker for fast inference
+      String result = invokeAudioWorker(audioTemp);
+      return ResponseEntity.ok(result);
     } finally {
       deleteQuietly(audioTemp);
     }
   }
+
+  // Persistent audio worker invocation
+  private String invokeAudioWorker(Path audioTemp) throws Exception {
+    synchronized (audioWorkerLock) {
+      ensureAudioWorkerStarted();
+      Map<String, Object> request = new LinkedHashMap<>();
+      request.put("audioPath", audioTemp.toAbsolutePath().toString());
+      audioWorkerStdin.write(OBJECT_MAPPER.writeValueAsString(request));
+      audioWorkerStdin.newLine();
+      audioWorkerStdin.flush();
+      String responseLine = audioWorkerStdout.readLine();
+      if (responseLine == null) {
+        stopAudioWorker();
+        throw new IOException("Audio worker closed stdout unexpectedly");
+      }
+      JsonNode response = OBJECT_MAPPER.readTree(responseLine);
+      if (!response.path("ok").asBoolean(false)) {
+        throw new IOException(response.path("error").asText("Audio worker returned unknown error"));
+      }
+      return response.path("rawOutput").asText("");
+    }
+  }
+
+  private void ensureAudioWorkerStarted() throws IOException {
+    if (audioWorkerProcess != null && audioWorkerProcess.isAlive() && audioWorkerStdin != null && audioWorkerStdout != null) {
+      return;
+    }
+    stopAudioWorker();
+    ProcessBuilder workerPb = new ProcessBuilder("python", AUDIO_WORKER_SCRIPT);
+    workerPb.directory(new File(AUDIO_WORK_DIR));
+    workerPb.redirectErrorStream(false);
+    Process process = workerPb.start();
+    java.io.BufferedWriter stdin = new java.io.BufferedWriter(
+        new java.io.OutputStreamWriter(process.getOutputStream(), java.nio.charset.StandardCharsets.UTF_8));
+    java.io.BufferedReader stdout = new java.io.BufferedReader(
+        new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+    java.io.BufferedReader stderr = new java.io.BufferedReader(
+        new java.io.InputStreamReader(process.getErrorStream(), java.nio.charset.StandardCharsets.UTF_8));
+    Thread stderrDrainer = new Thread(() -> {
+      try {
+        String line;
+        while ((line = stderr.readLine()) != null) {
+          log.debug("[audio-worker] {}", line);
+        }
+      } catch (IOException ignored) {}
+    }, "audio-worker-stderr");
+    stderrDrainer.setDaemon(true);
+    stderrDrainer.start();
+    audioWorkerProcess = process;
+    audioWorkerStdin = stdin;
+    audioWorkerStdout = stdout;
+  }
+
+  private void stopAudioWorker() {
+    synchronized (audioWorkerLock) {
+      if (audioWorkerStdin != null) {
+        try { audioWorkerStdin.close(); } catch (IOException ignored) {}
+      }
+      if (audioWorkerStdout != null) {
+        try { audioWorkerStdout.close(); } catch (IOException ignored) {}
+      }
+      if (audioWorkerProcess != null && audioWorkerProcess.isAlive()) {
+        audioWorkerProcess.destroy();
+      }
+      audioWorkerStdin = null;
+      audioWorkerStdout = null;
+      audioWorkerProcess = null;
+    }
+  }
+  
 
   @PostMapping(value = "/avsr/upload-video", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<String> uploadVideo(

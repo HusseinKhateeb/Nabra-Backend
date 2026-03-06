@@ -140,7 +140,7 @@ public class LipReadingService {
     throw new IllegalArgumentException("Could not parse lip model output. Make sure command returns top predictions in JSON or ranked text lines.");
   }
 
-  private String runAudioModel(String audioPath) {
+  public String runAudioModel(String audioPath) {
     String command = applyTemplate(audioCommand, Map.of(
         "python", pythonCommand,
         "audio", audioPath
