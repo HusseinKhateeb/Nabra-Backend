@@ -47,13 +47,22 @@ public class ChatVoiceInferenceController {
         if (message.getType() != com.nabra.backend.common.model.Enums.MessageType.VOICE) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Message is not a voice message");
         }
+        File audioFile = null;
         String mediaUrl = message.getMediaUrl();
-        if (mediaUrl == null || mediaUrl.isBlank()) {
+        if (mediaUrl != null && !mediaUrl.isBlank()) {
+            audioFile = new File(mediaUrl);
+            if (!audioFile.exists()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Audio file not found on server");
+            }
+        } else if (message.getAudioData() != null && message.getAudioData().length > 0) {
+            // Write BLOB to temp file
+            audioFile = File.createTempFile("voice-msg-", ".wav");
+            try (FileOutputStream fos = new FileOutputStream(audioFile)) {
+                fos.write(message.getAudioData());
+            }
+            audioFile.deleteOnExit();
+        } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("No audio file found for this message");
-        }
-        File audioFile = new File(mediaUrl);
-        if (!audioFile.exists()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Audio file not found on server");
         }
         RestTemplate restTemplate = new RestTemplate();
         FileSystemResource audioResource = new FileSystemResource(audioFile);

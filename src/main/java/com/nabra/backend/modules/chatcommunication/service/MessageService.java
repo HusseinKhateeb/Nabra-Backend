@@ -41,6 +41,12 @@ public class MessageService {
     );
   }
 
+  // Update chat's last message time
+  public void updateChatLastMessageAt(Chat chat, java.time.Instant sentAt) {
+    chat.setLastMessageAt(sentAt);
+    chatService.save(chat);
+  }
+
   // ================= Send =================
   @Transactional
   public MessageDtos.MessageResponse send(

@@ -35,9 +35,15 @@ public class Message extends BaseEntity {
   @Column(length = 4000)
   private String textContent;
 
-  /** For images/files/voice: a URL in S3 or similar. */
+
+  /** For images/files: a URL in S3 or similar. For voice: use audioData. */
   @Column(length = 600)
   private String mediaUrl;
+
+  /** For voice messages: raw audio data (WAV, MP3, etc.) stored as BLOB. */
+  @Lob
+  @Column(name = "audio_data")
+  private byte[] audioData;
 
   /** For voice messages: Speech-to-text output in Arabic. */
   @Column(length = 4000)
