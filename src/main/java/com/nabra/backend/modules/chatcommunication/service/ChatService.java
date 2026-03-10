@@ -8,7 +8,7 @@ import com.nabra.backend.modules.chatcommunication.repository.ChatRepository;
 import com.nabra.backend.modules.chatcommunication.repository.MessageRepository;
 import com.nabra.backend.modules.usermanagement.model.User;
 import com.nabra.backend.modules.usermanagement.service.UserService;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -112,6 +112,7 @@ public class ChatService {
         .anyMatch(u -> u.getId().equals(userId));
   }
 
+  @Transactional
   public Page<ChatDtos.ChatResponse> listForUser(
       String userId,
       Pageable pageable

@@ -459,4 +459,7 @@ def main():
 
 
 if __name__ == '__main__':
+    import sys
+    print("[DEBUG] Python executable:", sys.executable)
+    print("[DEBUG] Python version:", sys.version)
     main()

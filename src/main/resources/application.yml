@@ -6,6 +6,8 @@ spring:
     url: jdbc:postgresql://ep-jolly-unit-ag2asz3z-pooler.c-2.eu-central-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_y72RlzPbYqZu&sslmode=require&channelBinding=require
     # username: postgres
     # password: WKAB8lzpixs8i4SL
+  hikari:
+    auto-commit: false
   jpa:
     hibernate:
       ddl-auto: update

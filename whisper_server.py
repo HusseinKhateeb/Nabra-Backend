@@ -27,4 +27,7 @@ def transcribe():
     return jsonify({"text": result["text"]})
 
 if __name__ == "__main__":
+    import sys
+    print("[DEBUG] Python executable:", sys.executable)
+    print("[DEBUG] Python version:", sys.version)
     app.run(host="0.0.0.0", port=5000)

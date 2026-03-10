@@ -6,7 +6,7 @@ import com.nabra.backend.modules.chatcommunication.dto.MessageDtos;
 import com.nabra.backend.modules.chatcommunication.model.Message;
 import com.nabra.backend.modules.chatcommunication.repository.MessageRepository;
 import com.nabra.backend.modules.chatcommunication.service.MessageService;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -61,6 +61,7 @@ public class VoiceMessageController {
      * Stream the audio data for a given messageId (voice message) so clients can play it.
      */
     @GetMapping("/{messageId}/audio")
+    @Transactional
     public ResponseEntity<byte[]> getVoiceMessageAudio(
             @PathVariable("chatId") String chatId,
             @PathVariable("messageId") String messageId

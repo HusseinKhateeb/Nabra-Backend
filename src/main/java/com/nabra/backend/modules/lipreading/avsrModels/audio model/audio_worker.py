@@ -33,9 +33,19 @@ def main():
                 print(json.dumps({"ok": False, "error": "audioPath is required"}, ensure_ascii=False), flush=True)
                 continue
             result = run_audio_inference(audio_path, model, processor, device)
+            # Ensure result is a string and encodeable as UTF-8
+            if not isinstance(result, str):
+                result = str(result)
+            try:
+                result.encode('utf-8')
+            except Exception:
+                result = result.encode('utf-8', errors='replace').decode('utf-8')
             print(json.dumps({"ok": True, "rawOutput": result}, ensure_ascii=False), flush=True)
         except Exception as ex:
             print(json.dumps({"ok": False, "error": f"{type(ex).__name__}: {ex}"}, ensure_ascii=False), flush=True)
 
 if __name__ == "__main__":
+    import sys
+    print("[DEBUG] Python executable:", sys.executable)
+    print("[DEBUG] Python version:", sys.version)
     main()

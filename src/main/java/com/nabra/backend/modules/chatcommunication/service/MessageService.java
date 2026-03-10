@@ -8,7 +8,7 @@ import com.nabra.backend.modules.chatcommunication.model.Message;
 import com.nabra.backend.modules.chatcommunication.repository.MessageRepository;
 import com.nabra.backend.modules.usermanagement.model.User;
 import com.nabra.backend.modules.usermanagement.service.UserService;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -87,6 +87,7 @@ public class MessageService {
   }
 
   // ================= List =================
+  @Transactional
   public Page<MessageDtos.MessageResponse> list(
       String userId,
       String chatId,

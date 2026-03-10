@@ -4,6 +4,7 @@ import com.nabra.backend.common.web.SecurityUtils;
 import com.nabra.backend.modules.chatcommunication.model.Message;
 import com.nabra.backend.modules.chatcommunication.repository.MessageRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ public class ChatVoiceInferenceController {
     private String uploadAudioUrl;
 
     @PostMapping("/voice-infer")
+    @Transactional
     public ResponseEntity<?> inferVoiceMessageById(
             @RequestParam("voiceMessageId") String voiceMessageId) throws IOException {
         if (voiceMessageId == null || voiceMessageId.isBlank()) {
