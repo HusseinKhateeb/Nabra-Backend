@@ -40,7 +40,7 @@ def main():
                 result.encode('utf-8')
             except Exception:
                 result = result.encode('utf-8', errors='replace').decode('utf-8')
-            print(json.dumps({"ok": True, "rawOutput": result}, ensure_ascii=False), flush=True)
+            print(json.dumps({"result": result}, ensure_ascii=False), flush=True)
         except Exception as ex:
             print(json.dumps({"ok": False, "error": f"{type(ex).__name__}: {ex}"}, ensure_ascii=False), flush=True)
 

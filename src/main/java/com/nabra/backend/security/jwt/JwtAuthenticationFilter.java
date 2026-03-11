@@ -30,37 +30,57 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       FilterChain filterChain
   ) throws ServletException, IOException {
 
-    String header = request.getHeader("Authorization");
-    if (header == null || !header.startsWith("Bearer ")) {
-      filterChain.doFilter(request, response);
-      return;
-    }
-
-    String token = header.substring(7);
-
-    try {
-      Jws<Claims> jws = jwtService.parse(token);
-      String userId = jws.getBody().getSubject();
-
-      if (userId != null &&
-          SecurityContextHolder.getContext().getAuthentication() == null) {
-
-        var principal = userDetailsService.loadById(userId);
-        var auth = new UsernamePasswordAuthenticationToken(
-            principal,
-            null,
-            principal.getAuthorities()
-        );
-        auth.setDetails(
-            new WebAuthenticationDetailsSource().buildDetails(request)
-        );
-        SecurityContextHolder.getContext().setAuthentication(auth);
+      String token = null;
+      String header = request.getHeader("Authorization");
+      if (header != null && header.startsWith("Bearer ")) {
+        token = header.substring(7);
       }
-    } catch (Exception ignored) {
-      // Token invalid → endpoint نفسه يقرر
-    }
 
-    filterChain.doFilter(request, response);
+      // WebSocket handshake: check for token in query string
+      if (token == null) {
+        String uri = request.getRequestURI();
+        if (uri != null && uri.contains("/ws-chat")) {
+          String query = request.getQueryString();
+          if (query != null) {
+            for (String param : query.split("&")) {
+              String[] kv = param.split("=");
+              if (kv.length == 2 && kv[0].equals("token")) {
+                token = kv[1];
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (token == null) {
+        filterChain.doFilter(request, response);
+        return;
+      }
+
+      try {
+        Jws<Claims> jws = jwtService.parse(token);
+        String userId = jws.getBody().getSubject();
+
+        if (userId != null &&
+            SecurityContextHolder.getContext().getAuthentication() == null) {
+
+          var principal = userDetailsService.loadById(userId);
+          var auth = new UsernamePasswordAuthenticationToken(
+              principal,
+              null,
+              principal.getAuthorities()
+          );
+          auth.setDetails(
+              new WebAuthenticationDetailsSource().buildDetails(request)
+          );
+          SecurityContextHolder.getContext().setAuthentication(auth);
+        }
+      } catch (Exception ignored) {
+        // Token invalid
+      }
+
+      filterChain.doFilter(request, response);
   }
 
   // ❗ تجاهل auth endpoints

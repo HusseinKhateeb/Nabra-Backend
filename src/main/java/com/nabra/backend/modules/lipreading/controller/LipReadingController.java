@@ -541,7 +541,11 @@ public class LipReadingController {
 
       // Use persistent audio worker for fast inference
       String result = invokeAudioWorker(audioTemp);
-      return ResponseEntity.ok(result);
+      // Return JSON object with 'result' field
+      String json = OBJECT_MAPPER.writeValueAsString(Map.of("result", result));
+      return ResponseEntity.ok()
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(json);
     } finally {
       deleteQuietly(audioTemp);
     }
@@ -562,10 +566,10 @@ public class LipReadingController {
         throw new IOException("Audio worker closed stdout unexpectedly");
       }
       JsonNode response = OBJECT_MAPPER.readTree(responseLine);
-      if (!response.path("ok").asBoolean(false)) {
-        throw new IOException(response.path("error").asText("Audio worker returned unknown error"));
+      if (!response.has("result")) {
+        throw new IOException("Audio worker did not return a 'result' field: " + responseLine);
       }
-      return response.path("rawOutput").asText("");
+      return response.path("result").asText("");
     }
   }
 
@@ -574,7 +578,9 @@ public class LipReadingController {
       return;
     }
     stopAudioWorker();
-    ProcessBuilder workerPb = new ProcessBuilder("python", AUDIO_WORKER_SCRIPT);
+    // Use the Python executable from the audio-worker-venv outside the project
+    String pythonExe = "D:\\Graduation Extra\\Nabra Workspace\\.venv\\Scripts\\python.exe";
+    ProcessBuilder workerPb = new ProcessBuilder(pythonExe, AUDIO_WORKER_SCRIPT);
     workerPb.directory(new File(AUDIO_WORK_DIR));
     workerPb.redirectErrorStream(false);
     Process process = workerPb.start();
