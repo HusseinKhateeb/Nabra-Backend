@@ -46,6 +46,19 @@ public ResponseEntity<?> transcribeMessage(
     return ResponseEntity.ok(result);
 }
 
+/**
+     * Delete a message in a chat.
+     */
+    @DeleteMapping("/{messageId}")
+    public ResponseEntity<?> deleteMessage(
+        @PathVariable("chatId") String chatId,
+        @PathVariable("messageId") String messageId
+    ) {
+        var p = SecurityUtils.currentPrincipal();
+        messageService.deleteMessage(p.getUserId(), chatId, messageId);
+        return ResponseEntity.noContent().build();
+    }
+
 @GetMapping
 public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
     @PathVariable("chatId") String chatId,
@@ -60,6 +73,4 @@ public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
         messageService.list(p.getUserId(), chatId, pageable)
     );
 }
-
-
 }

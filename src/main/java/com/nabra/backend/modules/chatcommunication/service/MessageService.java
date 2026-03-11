@@ -193,4 +193,21 @@ public class MessageService {
 
     return toDto(message);
   }
+
+  /**
+   * Delete a message by its ID in a chat.
+   */
+  @Transactional
+  public void deleteMessage(String userId, String chatId, String messageId) {
+    Chat chat = chatService.getChat(chatId);
+    if (!chatService.isParticipant(chat, userId)) {
+      throw new IllegalArgumentException("Not a participant in this chat");
+    }
+    Message message = messageRepository.findById(messageId)
+      .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+    if (!message.getChat().getId().equals(chatId)) {
+      throw new IllegalArgumentException("Message does not belong to this chat");
+    }
+    messageRepository.delete(message);
+  }
 }
