@@ -13,26 +13,30 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class VisualDictionaryService {
+    // Thread pool for background video processing
+    private static final ExecutorService videoExecutor = Executors.newSingleThreadExecutor();
 
     private final CategoryRepository categoryRepo;
     private final WordRepository wordRepo;
     private final WordVideoRepository videoRepo;
     private final FavoriteWordRepository favoriteRepo;
 
-    private static final String VIDEO_DIR = System.getProperty("user.dir") + File.separator + "uploads" + File.separator + "videos" + File.separator;
+    private static final String VIDEO_DIR = System.getProperty("user.dir") + File.separator + "uploads" + File.separator
+            + "videos" + File.separator;
 
     /*
      * =====================
      * USER
      * =====================
      */
-
 
     public List<CategoryWithWordsDto> getCategoriesWithWords() {
         return categoryRepo.findAll().stream().map(c -> {
@@ -140,7 +144,6 @@ public class VisualDictionaryService {
     public WordVideo uploadVideo(String wordId, MultipartFile file) {
         try {
             File dir = new File(VIDEO_DIR);
-            // Ensure all parent directories exist
             if (!dir.exists()) {
                 boolean created = dir.mkdirs();
                 if (!created) {
@@ -150,17 +153,74 @@ public class VisualDictionaryService {
 
             String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
             File dest = new File(dir, fileName);
-            // Log the absolute path for debugging
             System.out.println("Saving video to: " + dest.getAbsolutePath());
             file.transferTo(dest);
 
             Word word = wordRepo.findById(wordId).orElseThrow();
 
+            // Always return the final URL that will be used after encoding
             WordVideo video = new WordVideo();
             video.setWord(word);
-            video.setVideoUrl("/videos/" + fileName);
+            video.setVideoUrl("/videos/" + fileName); // This will be the final URL after encoding
+            WordVideo savedVideo = videoRepo.save(video);
 
-            return videoRepo.save(video);
+
+            // Run ffprobe/ffmpeg in background
+            videoExecutor.submit(() -> {
+                try {
+                    // Use ffprobe to check codecs
+                    String probeCmd = String.format(
+                        "ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
+                        dest.getAbsolutePath()
+                    );
+                    Process probeVideo = Runtime.getRuntime().exec(probeCmd);
+                    java.io.BufferedReader vReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeVideo.getInputStream()));
+                    String vCodec = vReader.readLine();
+                    vReader.close();
+                    probeVideo.waitFor();
+
+                    probeCmd = String.format(
+                        "ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
+                        dest.getAbsolutePath()
+                    );
+                    Process probeAudio = Runtime.getRuntime().exec(probeCmd);
+                    java.io.BufferedReader aReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeAudio.getInputStream()));
+                    String aCodec = aReader.readLine();
+                    aReader.close();
+                    probeAudio.waitFor();
+
+                    boolean needsReencode = !("h264".equalsIgnoreCase(vCodec) && "aac".equalsIgnoreCase(aCodec));
+
+                    if (needsReencode) {
+                        String encodedFileName = fileName.replace(".mp4", "_encoded.mp4");
+                        File encodedDest = new File(dir, encodedFileName);
+                        String ffmpegCmd = String.format(
+                                "ffmpeg -y -i \"%s\" -vf format=yuv420p -c:v libx264 -profile:v high -level:v 4.0 -c:a aac \"%s\"",
+                                dest.getAbsolutePath(), encodedDest.getAbsolutePath());
+                        System.out.println("FFmpeg command: " + ffmpegCmd);
+                        Process ffmpeg = Runtime.getRuntime().exec(ffmpegCmd);
+                        int exitCode = ffmpeg.waitFor();
+                        if (exitCode == 0) {
+                            dest.delete();
+                            File finalDest = new File(dir, fileName);
+                            boolean renamed = encodedDest.renameTo(finalDest);
+                            if (!renamed) {
+                                System.err.println("Failed to rename encoded video to original name.");
+                            }
+                        } else {
+                            System.err.println("FFmpeg failed to re-encode video. Exit code: " + exitCode);
+                        }
+                    } else {
+                        System.out.println("Video already in H.264/AAC format, skipping re-encode.");
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            });
+
+            // Respond immediately with the final URL
+            // Client should poll or reload to check when the video is ready
+            return savedVideo;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

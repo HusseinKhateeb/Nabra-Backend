@@ -15,8 +15,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+
+
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.catalina.connector.ClientAbortException;
 
 /**
  * Global exception handler for REST API.
@@ -101,11 +104,27 @@ public class GlobalExceptionHandler {
 
   /**
    * Handle all other exceptions.
+   * Suppress stack trace for ClientAbortException wrapped in generic Exception.
    */
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiError> handleGeneric(Exception ex, HttpServletRequest req) {
+    Throwable cause = ex.getCause();
+    if (ex instanceof ClientAbortException || (cause != null && cause instanceof ClientAbortException)) {
+      log.debug("Client aborted connection at {}: {}", req.getRequestURI(), ex.getMessage());
+      return null; // No response, let Tomcat handle
+    }
     log.error("Unexpected error at {}: {}", req.getRequestURI(), ex.getMessage(), ex);
     ApiError body = ApiError.of(500, "Internal Server Error", "An unexpected error occurred", req.getRequestURI(), Map.of());
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+  }
+
+  /**
+   * Suppress logging for ClientAbortException (e.g., client cancels video download).
+   */
+  @ExceptionHandler(ClientAbortException.class)
+  public void handleClientAbort(ClientAbortException ex, HttpServletRequest req) {
+    // Optionally log at debug level, but do not return a response or log as error
+    log.debug("Client aborted connection at {}: {}", req.getRequestURI(), ex.getMessage());
+    // No response body, just let Spring/Tomcat handle the disconnect
   }
 }

@@ -90,9 +90,8 @@ app:
 
 logging:
   level:
-    org.hibernate.SQL: debug
-    org.springframework.security: TRACE
-    org.springframework.web: DEBUG
+    org.springframework.web.servlet.DispatcherServlet: DEBUG
+    org.springframework.web.servlet.handler.SimpleUrlHandlerMapping: DEBUG
 
 lip:
   command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py" --video {video} --top-k {topK} --use-mediapipe --json-only'
