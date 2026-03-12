@@ -1,8 +1,9 @@
 package com.nabra.backend.modules.visualdictionary.controller;
 
-import com.nabra.backend.modules.visualdictionary.dto.CategoryDto;
+import com.nabra.backend.modules.visualdictionary.dto.CategoryWithWordsDto;
 import com.nabra.backend.modules.visualdictionary.dto.WordDto;
 import com.nabra.backend.modules.visualdictionary.service.VisualDictionaryService;
+import org.springframework.http.ResponseEntity;
 import com.nabra.backend.security.principal.UserPrincipal; // ✅
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,8 +18,18 @@ public class VisualDictionaryController {
     private final VisualDictionaryService service;
 
     @GetMapping("/categories")
-    public List<CategoryDto> categories() {
-        return service.getCategories();
+    public List<CategoryWithWordsDto> categories() {
+        return service.getCategoriesWithWords();
+    }
+
+    @DeleteMapping("/categories/{categoryId}")
+    public ResponseEntity<?> deleteCategory(@PathVariable("categoryId") String categoryId) {
+        try {
+            service.deleteCategory(categoryId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
 @GetMapping("/categories/{categoryId}/words")
@@ -52,5 +63,15 @@ public List<WordDto> getWords(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return service.getFavorites(principal.getId());
+    }
+
+    @DeleteMapping("/words/{wordId}")
+    public ResponseEntity<?> deleteWord(@PathVariable("wordId") String wordId) {
+        try {
+            service.deleteWord(wordId);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }
