@@ -156,71 +156,68 @@ public class VisualDictionaryService {
             System.out.println("Saving video to: " + dest.getAbsolutePath());
             file.transferTo(dest);
 
+            // Use ffprobe to check codecs
+            String probeCmd = String.format(
+                "ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
+                dest.getAbsolutePath()
+            );
+            Process probeVideo = Runtime.getRuntime().exec(probeCmd);
+            java.io.BufferedReader vReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeVideo.getInputStream()));
+            String vCodec = vReader.readLine();
+            vReader.close();
+            probeVideo.waitFor();
+
+            probeCmd = String.format(
+                "ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
+                dest.getAbsolutePath()
+            );
+            Process probeAudio = Runtime.getRuntime().exec(probeCmd);
+            java.io.BufferedReader aReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeAudio.getInputStream()));
+            String aCodec = aReader.readLine();
+            aReader.close();
+            probeAudio.waitFor();
+
+            boolean needsReencode = !("h264".equalsIgnoreCase(vCodec) && "aac".equalsIgnoreCase(aCodec));
+
+            if (needsReencode) {
+                String encodedFileName = fileName.replace(".mp4", "_encoded.mp4");
+                File encodedDest = new File(dir, encodedFileName);
+                String ffmpegCmd = String.format(
+                        "ffmpeg -y -i \"%s\" -vf format=yuv420p -c:v libx264 -profile:v high -level:v 4.0 -c:a aac \"%s\"",
+                        dest.getAbsolutePath(), encodedDest.getAbsolutePath());
+                System.out.println("FFmpeg command: " + ffmpegCmd);
+                Process ffmpeg = Runtime.getRuntime().exec(ffmpegCmd);
+                // Capture FFmpeg stderr for debugging
+                java.io.BufferedReader errReader = new java.io.BufferedReader(new java.io.InputStreamReader(ffmpeg.getErrorStream()));
+                StringBuilder ffmpegErr = new StringBuilder();
+                String line;
+                while ((line = errReader.readLine()) != null) {
+                    ffmpegErr.append(line).append(System.lineSeparator());
+                }
+                int exitCode = ffmpeg.waitFor();
+                if (exitCode == 0) {
+                    dest.delete();
+                    File finalDest = new File(dir, fileName);
+                    boolean renamed = encodedDest.renameTo(finalDest);
+                    if (!renamed) {
+                        System.err.println("Failed to rename encoded video to original name.");
+                        throw new RuntimeException("Failed to rename encoded video to original name.");
+                    }
+                } else {
+                    System.err.println("FFmpeg failed to re-encode video. Exit code: " + exitCode);
+                    System.err.println("FFmpeg error output:\n" + ffmpegErr);
+                    throw new RuntimeException("FFmpeg failed to re-encode video. Exit code: " + exitCode + "\n" + ffmpegErr);
+                }
+            } else {
+                System.out.println("Video already in H.264/AAC format, skipping re-encode.");
+            }
+
             Word word = wordRepo.findById(wordId).orElseThrow();
 
-            // Always return the final URL that will be used after encoding
             WordVideo video = new WordVideo();
             video.setWord(word);
-            video.setVideoUrl("/videos/" + fileName); // This will be the final URL after encoding
-            WordVideo savedVideo = videoRepo.save(video);
-
-
-            // Run ffprobe/ffmpeg in background
-            videoExecutor.submit(() -> {
-                try {
-                    // Use ffprobe to check codecs
-                    String probeCmd = String.format(
-                        "ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
-                        dest.getAbsolutePath()
-                    );
-                    Process probeVideo = Runtime.getRuntime().exec(probeCmd);
-                    java.io.BufferedReader vReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeVideo.getInputStream()));
-                    String vCodec = vReader.readLine();
-                    vReader.close();
-                    probeVideo.waitFor();
-
-                    probeCmd = String.format(
-                        "ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 \"%s\"",
-                        dest.getAbsolutePath()
-                    );
-                    Process probeAudio = Runtime.getRuntime().exec(probeCmd);
-                    java.io.BufferedReader aReader = new java.io.BufferedReader(new java.io.InputStreamReader(probeAudio.getInputStream()));
-                    String aCodec = aReader.readLine();
-                    aReader.close();
-                    probeAudio.waitFor();
-
-                    boolean needsReencode = !("h264".equalsIgnoreCase(vCodec) && "aac".equalsIgnoreCase(aCodec));
-
-                    if (needsReencode) {
-                        String encodedFileName = fileName.replace(".mp4", "_encoded.mp4");
-                        File encodedDest = new File(dir, encodedFileName);
-                        String ffmpegCmd = String.format(
-                                "ffmpeg -y -i \"%s\" -vf format=yuv420p -c:v libx264 -profile:v high -level:v 4.0 -c:a aac \"%s\"",
-                                dest.getAbsolutePath(), encodedDest.getAbsolutePath());
-                        System.out.println("FFmpeg command: " + ffmpegCmd);
-                        Process ffmpeg = Runtime.getRuntime().exec(ffmpegCmd);
-                        int exitCode = ffmpeg.waitFor();
-                        if (exitCode == 0) {
-                            dest.delete();
-                            File finalDest = new File(dir, fileName);
-                            boolean renamed = encodedDest.renameTo(finalDest);
-                            if (!renamed) {
-                                System.err.println("Failed to rename encoded video to original name.");
-                            }
-                        } else {
-                            System.err.println("FFmpeg failed to re-encode video. Exit code: " + exitCode);
-                        }
-                    } else {
-                        System.out.println("Video already in H.264/AAC format, skipping re-encode.");
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            });
-
-            // Respond immediately with the final URL
-            // Client should poll or reload to check when the video is ready
-            return savedVideo;
+            video.setVideoUrl("/videos/" + fileName);
+            return videoRepo.save(video);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
