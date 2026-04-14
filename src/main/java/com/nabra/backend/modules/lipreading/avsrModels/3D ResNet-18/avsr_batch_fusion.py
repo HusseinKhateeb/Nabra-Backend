@@ -196,7 +196,7 @@ def extract_mouth_frames(video_path, img_size=112, frame_count=25):
 
     return frames, detected_face_frames, detector is not None
 
-def predict_lip(model, frames, device, idx_to_word, top_k=5):
+def predict_lip(model, frames, device, idx_to_word, top_k=40):
     frames_array = np.stack(frames, axis=1)
     tensor = torch.from_numpy(frames_array).unsqueeze(0).to(device)
     with torch.inference_mode():
@@ -204,7 +204,8 @@ def predict_lip(model, frames, device, idx_to_word, top_k=5):
         probs = F.softmax(logits, dim=1)[0]
         conf, idx = torch.max(probs, dim=0)
     probs_np = probs.cpu().numpy()
-    top_indices = np.argsort(probs_np)[::-1][:top_k]
+    # Always use top 40 predictions regardless of input
+    top_indices = np.argsort(probs_np)[::-1][:40]
     top_predictions = [(idx_to_word[int(i)], float(probs_np[i])) for i in top_indices]
     return idx_to_word[idx.item()], conf.item(), top_predictions
 

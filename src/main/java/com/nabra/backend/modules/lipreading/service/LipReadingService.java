@@ -46,7 +46,7 @@ public class LipReadingService {
   @Value("${app.ai.avsr.audio.command:}")
   private String audioCommand;
 
-  @Value("${app.ai.avsr.topK:5}")
+  @Value("${app.ai.avsr.topK:40}")
   private Integer defaultTopK;
 
   @Value("${app.ai.avsr.timeoutSeconds:60}")

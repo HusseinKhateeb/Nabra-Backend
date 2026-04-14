@@ -81,7 +81,7 @@ app:
       # Example: "{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py {audio}"
       audio:
         command: '{python} "src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py" {audio}'
-      topK: 5
+      topK: 40
       timeoutSeconds: 60
 
   # ✅ المسار الحقيقي لحفظ الفيديوهات

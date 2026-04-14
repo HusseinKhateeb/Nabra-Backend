@@ -30,7 +30,8 @@ def run_lip_only(video_path: str, top_k: int = 5, frame_count: int = 25):
     if face_detection_enabled and detected_face_frames == 0:
         raise RuntimeError("No face detected in video frames")
 
-    best_word, best_conf, top_predictions = predict_lip(model, frames, device, idx_to_word, top_k=max(1, top_k))
+    # Always use top_k=40 for prediction
+    best_word, best_conf, top_predictions = predict_lip(model, frames, device, idx_to_word, top_k=40)
     return {
         "bestPrediction": {
             "word": best_word,
