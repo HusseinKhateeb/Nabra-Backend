@@ -410,7 +410,7 @@ public class LipReadingController {
 
   private String invokeFusionStandalone(Path audioTemp, Path videoTemp, boolean fast, Integer frameCount) throws Exception {
     java.util.List<String> command = new java.util.ArrayList<>();
-    command.add("python");
+    command.add(resolveWhisperPythonExecutable());
     command.add("avsr_batch_fusion.py");
     command.add(audioTemp.toAbsolutePath().toString());
     command.add(videoTemp.toAbsolutePath().toString());
@@ -448,7 +448,7 @@ public class LipReadingController {
 
     stopFusionWorker();
 
-    ProcessBuilder workerPb = new ProcessBuilder("python", AVSR_WORKER_SCRIPT);
+    ProcessBuilder workerPb = new ProcessBuilder(resolveWhisperPythonExecutable(), AVSR_WORKER_SCRIPT);
     workerPb.directory(new File(AVSR_WORK_DIR));
     workerPb.redirectErrorStream(false);
     Process process = workerPb.start();
@@ -578,8 +578,7 @@ public class LipReadingController {
       return;
     }
     stopAudioWorker();
-    // Use the Python executable from the audio-worker-venv outside the project
-    String pythonExe = "D:\\Graduation Extra\\Nabra Workspace\\.venv\\Scripts\\python.exe";
+    String pythonExe = resolveWhisperPythonExecutable();
     ProcessBuilder workerPb = new ProcessBuilder(pythonExe, AUDIO_WORKER_SCRIPT);
     workerPb.directory(new File(AUDIO_WORK_DIR));
     workerPb.redirectErrorStream(false);
@@ -603,6 +602,20 @@ public class LipReadingController {
     audioWorkerProcess = process;
     audioWorkerStdin = stdin;
     audioWorkerStdout = stdout;
+  }
+
+  private String resolveWhisperPythonExecutable() {
+    String pythonExe = System.getenv("AVSR_WHISPER_PYTHON");
+    if (pythonExe != null && !pythonExe.isBlank()) {
+      return pythonExe;
+    }
+
+    pythonExe = System.getenv("AVSR_ASR_PYTHON");
+    if (pythonExe != null && !pythonExe.isBlank()) {
+      return pythonExe;
+    }
+
+    return "python";
   }
 
   private void stopAudioWorker() {

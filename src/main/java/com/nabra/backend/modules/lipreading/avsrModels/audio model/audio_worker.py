@@ -1,10 +1,11 @@
 import io
 import json
+import os
 import sys
 from test_asr_ctc import load_asr, load_audio, transcribe_waveform, normalize_asr_text
 
-# Hardcoded model ID (change if needed)
-MODEL_ID = "elgeish/wav2vec2-large-xlsr-53-levantine-arabic"
+# Whisper model name (override with AVSR_WHISPER_MODEL)
+MODEL_ID = os.getenv("AVSR_WHISPER_MODEL", os.getenv("AVSR_ASR_MODEL", "medium"))
 
 def load_model_once():
     processor, model, device = load_asr(MODEL_ID)
@@ -45,7 +46,4 @@ def main():
             print(json.dumps({"ok": False, "error": f"{type(ex).__name__}: {ex}"}, ensure_ascii=False), flush=True)
 
 if __name__ == "__main__":
-    import sys
-    print("[DEBUG] Python executable:", sys.executable)
-    print("[DEBUG] Python version:", sys.version)
     main()

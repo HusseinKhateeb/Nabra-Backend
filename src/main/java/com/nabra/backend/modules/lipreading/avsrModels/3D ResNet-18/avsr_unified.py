@@ -348,7 +348,7 @@ def main():
     parser = argparse.ArgumentParser(description="Unified AVSR: Audio + Lip Reading in one script")
     parser.add_argument('--checkpoint', type=str, default='checkpoints/best_model_acc_82.59.pth', help='Lip model checkpoint')
     parser.add_argument('--word_map', type=str, default='checkpoints/word_to_idx.json', help='Word vocabulary')
-    parser.add_argument('--asr_model', type=str, default='elgeish/wav2vec2-large-xlsr-53-levantine-arabic', help='ASR model ID')
+    parser.add_argument('--asr_model', type=str, default='medium', help='Whisper model name (tiny, base, small, medium, large-v3)')
     parser.add_argument('--camera', type=int, default=0, help='Webcam device ID')
     parser.add_argument('--frames', type=int, default=25, help='Frames per lip prediction')
     parser.add_argument('--img_size', type=int, default=112, help='Resize mouth to this size')

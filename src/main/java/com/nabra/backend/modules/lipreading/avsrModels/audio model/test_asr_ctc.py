@@ -12,7 +12,14 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import numpy as np
 import torch
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+
+try:
+    import whisper
+except Exception as exc:
+    whisper = None
+    _WHISPER_IMPORT_ERROR = exc
+else:
+    _WHISPER_IMPORT_ERROR = None
 
 try:
     import torchaudio
@@ -22,6 +29,13 @@ except Exception:
 
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "0")
 os.environ.setdefault("HF_HUB_OFFLINE", "0")
+
+# Force Arabic-only transcription for both upload-audio and AVSR fusion endpoints.
+WHISPER_LANGUAGE = "ar"
+WHISPER_TEMPERATURE = float(os.getenv("AVSR_WHISPER_TEMPERATURE", "0"))
+WHISPER_BEAM_SIZE = int(os.getenv("AVSR_WHISPER_BEAM_SIZE", "1"))
+WHISPER_BEST_OF = int(os.getenv("AVSR_WHISPER_BEST_OF", "1"))
+WHISPER_CONDITION_ON_PREVIOUS_TEXT = os.getenv("AVSR_WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").strip().lower() in {"1", "true", "yes"}
 
 
 def load_audio(audio_path: str):
@@ -111,24 +125,22 @@ def load_audio(audio_path: str):
 
 
 def load_asr(model_id: str):
+    if whisper is None:
+        raise RuntimeError(
+            "Whisper is not installed. Install it with: pip install openai-whisper"
+        ) from _WHISPER_IMPORT_ERROR
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    local_only = os.getenv("AVSR_ASR_LOCAL_ONLY", "0").strip().lower() in {"1", "true", "yes"}
+    model_name = (model_id or os.getenv("AVSR_WHISPER_MODEL", "base")).strip() or "base"
 
     try:
-        processor = Wav2Vec2Processor.from_pretrained(model_id, local_files_only=local_only)
-        model = Wav2Vec2ForCTC.from_pretrained(model_id, local_files_only=local_only).to(device)
+        model = whisper.load_model(model_name, device=device)
     except Exception as exc:
-        if local_only:
-            raise RuntimeError(
-                "Local-only mode is enabled, but model files were not found in local cache. "
-                "Set AVSR_ASR_LOCAL_ONLY=0 (or unset it) to allow downloading."
-            ) from exc
         raise RuntimeError(
-            "Failed to load ASR model. Check internet access, Hugging Face availability, or model ID."
+            f"Failed to load Whisper model '{model_name}'. Check that the model is available and FFmpeg is installed."
         ) from exc
-    model.eval()
 
-    return processor, model, device
+    return None, model, device
 
 
 def transcribe_waveform(
@@ -138,13 +150,16 @@ def transcribe_waveform(
     model,
     device: str,
 ) -> str:
+    if whisper is None:
+        raise RuntimeError("Whisper is not installed. Install it with: pip install openai-whisper")
+
     if waveform.dim() == 1:
         waveform = waveform.unsqueeze(0)
 
     if waveform.size(0) > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
 
-    target_sr = processor.feature_extractor.sampling_rate
+    target_sr = 16000
     if sr != target_sr:
         if torchaudio is not None:
             waveform = torchaudio.functional.resample(waveform, sr, target_sr)
@@ -155,27 +170,32 @@ def transcribe_waveform(
             dst_idx = np.linspace(0.0, 1.0, num=target_len, endpoint=True)
             resampled = np.interp(dst_idx, src_idx, waveform.squeeze(0).cpu().numpy()).astype(np.float32)
             waveform = torch.from_numpy(resampled).unsqueeze(0)
-        sr = target_sr
 
-    inputs = processor(
-        waveform.squeeze().numpy(),
-        sampling_rate=sr,
-        return_tensors="pt",
-        padding=True,
-    )
-    input_values = inputs.input_values.to(device)
+    audio = waveform.squeeze().detach().cpu().numpy().astype(np.float32)
+    if np.max(np.abs(audio)) > 1.0:
+        audio = np.clip(audio / 32768.0, -1.0, 1.0)
 
-    with torch.no_grad():
-        logits = model(input_values).logits
+    decode_options = {
+        "language": WHISPER_LANGUAGE,
+        "task": "transcribe",
+        "fp16": device == "cuda",
+        "verbose": False,
+        "without_timestamps": True,
+        "temperature": WHISPER_TEMPERATURE,
+        "condition_on_previous_text": WHISPER_CONDITION_ON_PREVIOUS_TEXT,
+    }
+    if WHISPER_TEMPERATURE == 0:
+        decode_options["beam_size"] = WHISPER_BEAM_SIZE
+        decode_options["best_of"] = WHISPER_BEST_OF
 
-    pred_ids = torch.argmax(logits, dim=-1)
-    return processor.batch_decode(pred_ids)[0]
+    result = model.transcribe(audio, **decode_options)
+    return (result.get("text") or "").strip()
 
 
 def transcribe(audio_path: str, model_id: str) -> str:
-    processor, model, device = load_asr(model_id)
+    _, model, device = load_asr(model_id)
     waveform, sr = load_audio(audio_path)
-    return transcribe_waveform(waveform, sr, processor, model, device)
+    return transcribe_waveform(waveform, sr, None, model, device)
 
 
 def buckwalter_to_arabic(text: str) -> str:
@@ -249,12 +269,9 @@ def clean_recognized_text(text: str) -> str:
 def normalize_asr_text(raw_text: str) -> str:
     if not raw_text:
         return ""
-    arabic_text = clean_recognized_text(remove_arabic_diacritics(buckwalter_to_arabic(raw_text)))
-    if arabic_text:
-        return arabic_text
-    fallback = buckwalter_to_arabic(raw_text).strip()
-    if fallback:
-        return fallback
+    cleaned = clean_recognized_text(remove_arabic_diacritics(raw_text))
+    if cleaned:
+        return cleaned
     return raw_text.strip()
 
 
@@ -269,8 +286,8 @@ def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -
     except Exception as exc:
         raise RuntimeError("Realtime key mode is supported on Windows console only.") from exc
 
-    processor, model, device = load_asr(model_id)
-    sample_rate = int(processor.feature_extractor.sampling_rate)
+    _, model, device = load_asr(model_id)
+    sample_rate = 16000
 
     print("Realtime mode started.")
     print(f"Press 'p' to record {duration:g} seconds and transcribe.")
@@ -295,7 +312,7 @@ def run_realtime_mode(model_id: str, output_file: Path, duration: float = 2.0) -
                 sd.wait()
 
                 waveform = torch.from_numpy(recording.T)
-                raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
+                raw_text = transcribe_waveform(waveform, sample_rate, None, model, device)
                 arabic_text = normalize_asr_text(raw_text)
 
                 with output_file.open("a", encoding="utf-8") as f:
@@ -331,10 +348,10 @@ def run_mic_once(model_id: str, output_file: Path, duration: float = 2.0, device
     )
     sd.wait()
 
-    processor, model, device = load_asr(model_id)
+    _, model, device = load_asr(model_id)
 
     waveform = torch.from_numpy(recording.T)
-    raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
+    raw_text = transcribe_waveform(waveform, sample_rate, None, model, device)
     arabic_text = normalize_asr_text(raw_text)
 
     with output_file.open("w", encoding="utf-8") as f:
@@ -353,7 +370,7 @@ def run_mic_service(model_id: str, duration: float = 2.0, device_id=None) -> Non
         raise ImportError("Mic service mode needs sounddevice. Install with: pip install sounddevice") from exc
 
     sample_rate = 16000
-    processor, model, device = load_asr(model_id)
+    _, model, device = load_asr(model_id)
 
     while True:
         line = sys.stdin.readline()
@@ -390,7 +407,7 @@ def run_mic_service(model_id: str, duration: float = 2.0, device_id=None) -> Non
         sd.wait()
 
         waveform = torch.from_numpy(recording.T)
-        raw_text = transcribe_waveform(waveform, sample_rate, processor, model, device)
+        raw_text = transcribe_waveform(waveform, sample_rate, None, model, device)
         arabic_text = normalize_asr_text(raw_text)
 
         output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -399,7 +416,7 @@ def run_mic_service(model_id: str, duration: float = 2.0, device_id=None) -> Non
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Test a Wav2Vec2 CTC ASR model on an audio file or microphone")
+    parser = argparse.ArgumentParser(description="Test a Whisper ASR model on an audio file or microphone")
     parser.add_argument(
         "audio_path",
         nargs="?",
@@ -408,8 +425,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        default="elgeish/wav2vec2-large-xlsr-53-levantine-arabic",
-        help="Hugging Face model ID",
+        default=os.getenv("AVSR_WHISPER_MODEL", "base"),
+        help="Whisper model name, e.g. tiny, base, small, medium, large-v3",
     )
     parser.add_argument(
         "--realtime",

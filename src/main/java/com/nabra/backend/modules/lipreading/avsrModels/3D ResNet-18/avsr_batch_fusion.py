@@ -224,7 +224,7 @@ def run_asr(audio_path):
                     raise RuntimeError(f"Could not load ASR module spec: {asr_script_file}")
                 asr_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(asr_module)
-                model_id = os.getenv("AVSR_ASR_MODEL", "elgeish/wav2vec2-large-xlsr-53-levantine-arabic")
+                model_id = os.getenv("AVSR_WHISPER_MODEL", os.getenv("AVSR_ASR_MODEL", "medium"))
                 processor, model, device = asr_module.load_asr(model_id)
                 _CACHED_ASR = (asr_module, processor, model, device)
 
