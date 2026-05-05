@@ -165,8 +165,12 @@ public class LipReadingController {
       @RequestParam(value = "wait", defaultValue = "true") boolean wait,
       @RequestParam(value = "timeoutSeconds", defaultValue = "180") long timeoutSeconds,
       @RequestParam(value = "fast", defaultValue = "false") boolean fast,
-      @RequestParam(value = "frameCount", required = false) Integer frameCount) throws Exception {
+      @RequestParam(value = "frameCount", required = false) Integer frameCount,
+      @RequestParam(value = "sessionId", required = false) String sessionId) throws Exception {
     String userId = SecurityUtils.currentPrincipal().getUserId();
+    if (sessionId == null || sessionId.isEmpty()) {
+      sessionId = UUID.randomUUID().toString();
+    }
     log.info("Received fuse-files request");
     log.info("Request received for /fuse-files");
     writeLog("/fuse-files", "START", "Request received");
@@ -206,20 +210,35 @@ public class LipReadingController {
         jobFuture.get(Math.max(1L, timeoutSeconds), TimeUnit.SECONDS);
         FusionJob completedJob = fusionJobs.get(jobId);
         if (completedJob == null) {
-          return ResponseEntity.status(500).body("Fusion failed: missing job state");
+          return ResponseEntity.status(500).body(Map.of(
+              "sessionId", sessionId,
+              "jobId", jobId,
+              "error", "Fusion failed: missing job state"
+          ));
         }
         if (STATUS_COMPLETED.equals(completedJob.status)) {
-          if (completedJob.parsedResult != null) {
-            return ResponseEntity.ok(completedJob.parsedResult);
-          }
-          return ResponseEntity.ok(completedJob.rawOutput == null ? "" : completedJob.rawOutput.trim());
+          Object result = completedJob.parsedResult != null ? completedJob.parsedResult : (completedJob.rawOutput == null ? "" : completedJob.rawOutput.trim());
+          return ResponseEntity.ok(Map.of(
+              "sessionId", sessionId,
+              "jobId", jobId,
+              "status", STATUS_COMPLETED,
+              "result", result
+          ));
         }
         if (STATUS_FAILED.equals(completedJob.status)) {
           String errorText = completedJob.error != null ? completedJob.error : completedJob.rawOutput;
           if (isNoFaceError(errorText)) {
-            return ResponseEntity.unprocessableEntity().body("No face detected in video frames");
+            return ResponseEntity.unprocessableEntity().body(Map.of(
+                "sessionId", sessionId,
+                "jobId", jobId,
+                "error", "No face detected in video frames"
+            ));
           }
-          return ResponseEntity.status(500).body("Fusion failed: " + (errorText == null ? "Unknown error" : errorText));
+          return ResponseEntity.status(500).body(Map.of(
+              "sessionId", sessionId,
+              "jobId", jobId,
+              "error", "Fusion failed: " + (errorText == null ? "Unknown error" : errorText)
+          ));
         }
       } catch (TimeoutException timeoutException) {
         writeLog("/fuse-files", "TIMEOUT", "Job " + jobId + " still processing after wait timeout");
@@ -227,6 +246,7 @@ public class LipReadingController {
     }
 
     return ResponseEntity.accepted().body(Map.of(
+        "sessionId", sessionId,
         "jobId", jobId,
         "status", STATUS_QUEUED,
         "message", "Fusion job started",
