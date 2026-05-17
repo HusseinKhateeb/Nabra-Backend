@@ -5,7 +5,7 @@ import sys
 from test_asr_ctc import load_asr, load_audio, transcribe_waveform, normalize_asr_text
 
 # Whisper model name (override with AVSR_WHISPER_MODEL)
-MODEL_ID = os.getenv("AVSR_WHISPER_MODEL", os.getenv("AVSR_ASR_MODEL", "medium"))
+MODEL_ID = os.getenv("AVSR_WHISPER_MODEL", os.getenv("AVSR_ASR_MODEL", "base"))
 
 def load_model_once():
     processor, model, device = load_asr(MODEL_ID)

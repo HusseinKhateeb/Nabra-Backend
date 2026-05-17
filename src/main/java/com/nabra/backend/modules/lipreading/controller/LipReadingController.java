@@ -95,7 +95,7 @@ public class LipReadingController {
   private final SessionService sessionService;
   private static final Logger log = LoggerFactory.getLogger(LipReadingController.class);
   private final Map<String, FusionJob> fusionJobs = new ConcurrentHashMap<>();
-  private final ExecutorService fusionExecutor = Executors.newFixedThreadPool(2);
+  private final ExecutorService fusionExecutor = Executors.newFixedThreadPool(1);
   private final Object fusionWorkerLock = new Object();
   private volatile Process fusionWorkerProcess;
   private volatile java.io.BufferedWriter fusionWorkerStdin;
@@ -413,7 +413,7 @@ public class LipReadingController {
       fusionWorkerStdin.newLine();
       fusionWorkerStdin.flush();
 
-      String responseLine = fusionWorkerStdout.readLine();
+      String responseLine = readLineWithTimeout(fusionWorkerStdout, fusionWorkerProcess, 180);
       if (responseLine == null) {
         stopFusionWorker();
         throw new IOException("Worker closed stdout unexpectedly");
@@ -511,8 +511,18 @@ public class LipReadingController {
         } catch (IOException ignored) {
         }
       }
-      if (fusionWorkerProcess != null && fusionWorkerProcess.isAlive()) {
-        fusionWorkerProcess.destroy();
+      if (fusionWorkerProcess != null) {
+        if (fusionWorkerProcess.isAlive()) {
+          fusionWorkerProcess.destroy();
+          try {
+            if (!fusionWorkerProcess.waitFor(3, TimeUnit.SECONDS)) {
+              fusionWorkerProcess.destroyForcibly();
+              fusionWorkerProcess.waitFor(2, TimeUnit.SECONDS);
+            }
+          } catch (InterruptedException ignored) {
+            fusionWorkerProcess.destroyForcibly();
+          }
+        }
       }
 
       fusionWorkerStdin = null;
@@ -574,22 +584,28 @@ public class LipReadingController {
   // Persistent audio worker invocation
   private String invokeAudioWorker(Path audioTemp) throws Exception {
     synchronized (audioWorkerLock) {
-      ensureAudioWorkerStarted();
-      Map<String, Object> request = new LinkedHashMap<>();
-      request.put("audioPath", audioTemp.toAbsolutePath().toString());
-      audioWorkerStdin.write(OBJECT_MAPPER.writeValueAsString(request));
-      audioWorkerStdin.newLine();
-      audioWorkerStdin.flush();
-      String responseLine = audioWorkerStdout.readLine();
-      if (responseLine == null) {
-        stopAudioWorker();
-        throw new IOException("Audio worker closed stdout unexpectedly");
+      IOException lastError = null;
+      for (int attempt = 0; attempt < 2; attempt++) {
+        ensureAudioWorkerStarted();
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("audioPath", audioTemp.toAbsolutePath().toString());
+        audioWorkerStdin.write(OBJECT_MAPPER.writeValueAsString(request));
+        audioWorkerStdin.newLine();
+        audioWorkerStdin.flush();
+        String responseLine = readLineWithTimeout(audioWorkerStdout, audioWorkerProcess, 120);
+        if (responseLine == null) {
+          stopAudioWorker();
+          lastError = new IOException("Audio worker closed stdout unexpectedly");
+          log.warn("Audio worker died on attempt {}, restarting...", attempt + 1);
+          continue;
+        }
+        JsonNode response = OBJECT_MAPPER.readTree(responseLine);
+        if (!response.has("result")) {
+          throw new IOException("Audio worker did not return a 'result' field: " + responseLine);
+        }
+        return response.path("result").asText("");
       }
-      JsonNode response = OBJECT_MAPPER.readTree(responseLine);
-      if (!response.has("result")) {
-        throw new IOException("Audio worker did not return a 'result' field: " + responseLine);
-      }
-      return response.path("result").asText("");
+      throw lastError;
     }
   }
 
@@ -625,17 +641,45 @@ public class LipReadingController {
   }
 
   private String resolveWhisperPythonExecutable() {
-    String pythonExe = System.getenv("AVSR_WHISPER_PYTHON");
-    if (pythonExe != null && !pythonExe.isBlank()) {
-      return pythonExe;
+    String[] candidates = {
+        System.getenv("AVSR_WHISPER_PYTHON"),
+        System.getenv("AVSR_ASR_PYTHON"),
+        "python",
+        "python3",
+        "py"
+    };
+
+    for (String candidate : candidates) {
+      if (candidate == null || candidate.isBlank()) {
+        continue;
+      }
+      if (canImportWhisper(candidate)) {
+        return candidate;
+      }
     }
 
-    pythonExe = System.getenv("AVSR_ASR_PYTHON");
-    if (pythonExe != null && !pythonExe.isBlank()) {
-      return pythonExe;
-    }
-
+    log.warn("No Python interpreter with Whisper was found; falling back to 'python'. Set AVSR_WHISPER_PYTHON to a working interpreter.");
     return "python";
+  }
+
+  private boolean canImportWhisper(String pythonExe) {
+    Process process = null;
+    try {
+      ProcessBuilder processBuilder = new ProcessBuilder(pythonExe, "-c", "import whisper");
+      processBuilder.redirectErrorStream(true);
+      process = processBuilder.start();
+      if (!process.waitFor(10, TimeUnit.SECONDS)) {
+        process.destroyForcibly();
+        return false;
+      }
+      return process.exitValue() == 0;
+    } catch (Exception ex) {
+      return false;
+    } finally {
+      if (process != null) {
+        process.destroy();
+      }
+    }
   }
 
   private void stopAudioWorker() {
@@ -646,8 +690,18 @@ public class LipReadingController {
       if (audioWorkerStdout != null) {
         try { audioWorkerStdout.close(); } catch (IOException ignored) {}
       }
-      if (audioWorkerProcess != null && audioWorkerProcess.isAlive()) {
-        audioWorkerProcess.destroy();
+      if (audioWorkerProcess != null) {
+        if (audioWorkerProcess.isAlive()) {
+          audioWorkerProcess.destroy();
+          try {
+            if (!audioWorkerProcess.waitFor(3, TimeUnit.SECONDS)) {
+              audioWorkerProcess.destroyForcibly();
+              audioWorkerProcess.waitFor(2, TimeUnit.SECONDS);
+            }
+          } catch (InterruptedException ignored) {
+            audioWorkerProcess.destroyForcibly();
+          }
+        }
       }
       audioWorkerStdin = null;
       audioWorkerStdout = null;
@@ -676,6 +730,24 @@ public class LipReadingController {
       return ResponseEntity.ok("Video uploaded: " + videoTemp.toAbsolutePath());
     } finally {
       deleteQuietly(videoTemp);
+    }
+  }
+
+  private String readLineWithTimeout(java.io.BufferedReader reader, Process process, long timeoutSecs) throws IOException {
+    Thread killer = new Thread(() -> {
+      try {
+        Thread.sleep(timeoutSecs * 1000);
+        if (process.isAlive()) {
+          process.destroyForcibly();
+        }
+      } catch (InterruptedException ignored) {}
+    }, "worker-killer");
+    killer.setDaemon(true);
+    killer.start();
+    try {
+      return reader.readLine();
+    } finally {
+      killer.interrupt();
     }
   }
 

@@ -14,8 +14,6 @@ import sys
 import json
 import os
 import atexit
-import threading
-import importlib.util
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import numpy as np
@@ -43,9 +41,9 @@ ASR_SCRIPT_PATH = '../audio model/test_asr_ctc.py'
 ASR_VENV_PYTHON = os.getenv("AVSR_ASR_PYTHON", "")
 ASR_PYTHON_CANDIDATES = [
     ASR_VENV_PYTHON,
+    sys.executable,
     str((Path(__file__).resolve().parent.parent / "audio model" / ".venv" / "Scripts" / "python.exe")),
     "D:/Graduation Extra/Nabra Workspace/.venv/Scripts/python.exe",
-    sys.executable,
 ]
 
 MOUTH_LANDMARKS = [
@@ -59,8 +57,6 @@ _CACHED_DEVICE = None
 _CACHED_MODEL = None
 _CACHED_IDX_TO_WORD = None
 _CACHED_FACE_DETECTOR = None
-_CACHED_ASR = None
-_ASR_LOCK = threading.Lock()
 _FUSION_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 DEFAULT_FRAME_COUNT = max(8, int(os.getenv("AVSR_FRAME_COUNT", "25")))
 ASR_SUBPROCESS_TIMEOUT_SECONDS = max(20, int(os.getenv("AVSR_ASR_TIMEOUT_SECONDS", "45")))
@@ -215,49 +211,35 @@ def run_asr(audio_path):
     logging.debug(f"ASR script path: {ASR_SCRIPT_PATH}")
 
     asr_script_file = (Path(__file__).resolve().parent / ASR_SCRIPT_PATH).resolve()
-    try:
-        global _CACHED_ASR
-        with _ASR_LOCK:
-            if _CACHED_ASR is None:
-                spec = importlib.util.spec_from_file_location("nabra_test_asr_ctc", str(asr_script_file))
-                if spec is None or spec.loader is None:
-                    raise RuntimeError(f"Could not load ASR module spec: {asr_script_file}")
-                asr_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(asr_module)
-                model_id = os.getenv("AVSR_WHISPER_MODEL", os.getenv("AVSR_ASR_MODEL", "medium"))
-                processor, model, device = asr_module.load_asr(model_id)
-                _CACHED_ASR = (asr_module, processor, model, device)
-
-        asr_module, processor, model, device = _CACHED_ASR
-        waveform, sr = asr_module.load_audio(str(audio_path))
-        raw_text = asr_module.transcribe_waveform(waveform, sr, processor, model, device)
-        if hasattr(asr_module, "normalize_asr_text"):
-            normalized = asr_module.normalize_asr_text(raw_text)
-        else:
-            normalized = raw_text.strip()
-        if normalized:
-            return f"ASR (Arabic): {normalized}"
-        return raw_text.strip()
-    except Exception as e:
-        logging.error(f"ASR in-process error: {e}")
-
-    python_exec = next((candidate for candidate in ASR_PYTHON_CANDIDATES if candidate and Path(candidate).exists()), sys.executable)
-    logging.debug(f"ASR fallback python exec: {python_exec}")
+    python_exec = next((candidate for candidate in ASR_PYTHON_CANDIDATES if candidate and _python_can_import_whisper(candidate)), sys.executable)
+    logging.debug(f"ASR python exec: {python_exec}")
     try:
         result = subprocess.run([
             python_exec,
             str(asr_script_file),
             str(audio_path)
         ], capture_output=True, text=True, encoding='utf-8', timeout=ASR_SUBPROCESS_TIMEOUT_SECONDS)
-        logging.debug(f"ASR fallback stdout: {result.stdout}")
-        logging.debug(f"ASR fallback stderr: {result.stderr}")
-        logging.debug(f"ASR fallback returncode: {result.returncode}")
+        logging.debug(f"ASR stdout: {result.stdout}")
+        logging.debug(f"ASR stderr: {result.stderr}")
+        logging.debug(f"ASR returncode: {result.returncode}")
         if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ASR fallback exited with code {result.returncode}")
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"ASR exited with code {result.returncode}")
         return result.stdout.strip()
     except Exception as e:
-        logging.error(f"ASR fallback error: {e}")
+        logging.error(f"ASR error: {e}")
         return ""
+
+
+def _python_can_import_whisper(python_exec):
+    try:
+        result = subprocess.run([
+            python_exec,
+            "-c",
+            "import whisper"
+        ], capture_output=True, text=True, encoding='utf-8', timeout=10)
+        return result.returncode == 0
+    except Exception:
+        return False
 
 def levenshtein(s1, s2):
     if len(s1) < len(s2):

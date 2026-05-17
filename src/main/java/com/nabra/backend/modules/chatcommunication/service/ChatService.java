@@ -112,6 +112,13 @@ public class ChatService {
         .anyMatch(u -> u.getId().equals(userId));
   }
 
+  @Transactional(readOnly = true)
+  public boolean isParticipant(String chatId, String userId) {
+    Chat chat = chatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    return isParticipant(chat, userId);
+  }
+
   @Transactional
   public Page<ChatDtos.ChatResponse> listForUser(
       String userId,

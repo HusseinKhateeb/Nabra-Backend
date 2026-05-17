@@ -27,8 +27,7 @@ public class ChatWsController {
   public void join(@Payload String chatId, Principal principal) {
     String userId = principal.getName();
 
-    var chat = chatService.getChat(chatId);
-    if (!chatService.isParticipant(chat, userId)) {
+    if (!chatService.isParticipant(chatId, userId)) {
       throw new IllegalArgumentException("Not a participant in this chat");
     }
 
@@ -54,9 +53,7 @@ public class ChatWsController {
   public void send(@Payload ChatWsDtos.WsSendMessage req, Principal principal) {
     String userId = principal.getName();
 
-    // ✅ تحقق من الصلاحية فقط
-    var chat = chatService.getChat(req.chatId());
-    if (!chatService.isParticipant(chat, userId)) {
+    if (!chatService.isParticipant(req.chatId(), userId)) {
       throw new IllegalArgumentException("Not a participant in this chat");
     }
 
@@ -80,8 +77,7 @@ public class ChatWsController {
   public void typing(@Payload ChatWsDtos.WsTyping req, Principal principal) {
     String userId = principal.getName();
 
-    var chat = chatService.getChat(req.chatId());
-    if (!chatService.isParticipant(chat, userId)) {
+    if (!chatService.isParticipant(req.chatId(), userId)) {
       throw new IllegalArgumentException("Not a participant in this chat");
     }
 
