@@ -4,6 +4,7 @@ import com.nabra.backend.common.model.BaseEntity;
 import com.nabra.backend.common.model.Enums.SessionInputType;
 import com.nabra.backend.common.model.Enums.SessionOutputType;
 import com.nabra.backend.common.model.Enums.SessionStatus;
+import com.nabra.backend.common.model.Enums.SessionType;
 import com.nabra.backend.modules.usermanagement.model.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -14,11 +15,17 @@ import java.time.Instant;
 @Entity
 @Table(name = "sessions", indexes = {
     @Index(name = "idx_sessions_user_started", columnList = "user_id, startedAt"),
-    @Index(name = "idx_sessions_output_type", columnList = "outputType")
+    @Index(name = "idx_sessions_output_type", columnList = "outputType"),
+    @Index(name = "idx_sessions_status", columnList = "status")
 })
 @Getter
 @Setter
 public class Session extends BaseEntity {
+
+  /** Session module source (lip reading, chat, voice-to-text, etc.). */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "session_type", nullable = false, length = 20)
+  private SessionType sessionType = SessionType.LIP_READING;
 
   @ManyToOne(optional = false, fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", nullable = false)
@@ -56,4 +63,23 @@ public class Session extends BaseEntity {
 
   /** Optional accuracy metric (e.g., word error rate or confidence). */
   private Double accuracyScore;
+
+  /** Device information (browser, OS, device type). */
+  @Column(length = 500)
+  private String deviceInfo;
+
+  /** Model/algorithm version used in this session. */
+  @Column(length = 50)
+  private String modelVersion;
+
+  /** Whether session was processed offline. */
+  private Boolean isOffline = false;
+
+  /** Generic content field for future extensibility. */
+  @Column(length = 5000)
+  private String content;
+
+  /** Optional external reference ID related to this session content. */
+  @Column(name = "content_ref_id", length = 100)
+  private String contentRefId;
 }

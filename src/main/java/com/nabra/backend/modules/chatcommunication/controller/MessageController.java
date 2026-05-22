@@ -19,22 +19,58 @@ public class MessageController {
 
   private final MessageService messageService;
 
-  @PostMapping
-  public ResponseEntity<MessageDtos.MessageResponse> send(
-      @PathVariable String chatId,
-      @Valid @RequestBody MessageDtos.SendMessageRequest req
-  ) {
+
+@PostMapping
+public ResponseEntity<MessageDtos.MessageResponse> send(
+    @PathVariable("chatId") String chatId,
+    @Valid @RequestBody MessageDtos.SendMessageRequest req
+) {
     var p = SecurityUtils.currentPrincipal();
     String preferredLanguage = p.getUser().getPreferredLanguage();
-    return ResponseEntity.ok(messageService.send(p.getUserId(), chatId, req, preferredLanguage));
-  }
+    return ResponseEntity.ok(
+        messageService.send(p.getUserId(), chatId, req, preferredLanguage)
+    );
+}
 
-  @GetMapping
-  public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
-      @PathVariable String chatId,
-      Pageable pageable
-  ) {
+/**
+ * Transcribe a message in a chat.
+ */
+@PostMapping("/{messageId}/transcribe")
+public ResponseEntity<?> transcribeMessage(
+        @PathVariable("chatId") String chatId,
+        @PathVariable("messageId") String messageId
+) {
     var p = SecurityUtils.currentPrincipal();
-    return ResponseEntity.ok(messageService.list(p.getUserId(), chatId, pageable));
-  }
+    // TODO: Implement actual transcription logic in MessageService
+    Object result = messageService.transcribeMessage(p.getUserId(), chatId, messageId);
+    return ResponseEntity.ok(result);
+}
+
+/**
+     * Delete a message in a chat.
+     */
+    @DeleteMapping("/{messageId}")
+    public ResponseEntity<?> deleteMessage(
+        @PathVariable("chatId") String chatId,
+        @PathVariable("messageId") String messageId
+    ) {
+        var p = SecurityUtils.currentPrincipal();
+        messageService.deleteMessage(p.getUserId(), chatId, messageId);
+        return ResponseEntity.noContent().build();
+    }
+
+@GetMapping
+public ResponseEntity<Page<MessageDtos.MessageResponse>> list(
+    @PathVariable("chatId") String chatId,
+    Pageable pageable
+) {
+    var p = SecurityUtils.currentPrincipal();
+
+    // ✅ الحل النهائي
+    messageService.markAllAsRead(p.getUserId(), chatId);
+
+    return ResponseEntity.ok(
+        messageService.list(p.getUserId(), chatId, pageable)
+    );
+}
 }

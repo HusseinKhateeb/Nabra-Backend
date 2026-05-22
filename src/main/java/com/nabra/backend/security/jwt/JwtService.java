@@ -30,11 +30,14 @@ public class JwtService {
         .claim("role", role)
         .setIssuedAt(Date.from(now))
         .setExpiration(Date.from(now.plusSeconds(expirationSeconds)))
-        .signWith(key, SignatureAlgorithm.HS256)
+        .signWith(key)
         .compact();
   }
 
   public Jws<Claims> parse(String token) {
-    return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+    return Jwts.parserBuilder()
+        .setSigningKey(key)
+        .build()
+        .parseClaimsJws(token);
   }
 }

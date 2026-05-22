@@ -2,11 +2,13 @@ package com.nabra.backend.modules.usermanagement.model;
 
 import com.nabra.backend.common.model.BaseEntity;
 import com.nabra.backend.common.model.Enums.UserRole;
+import com.nabra.backend.common.model.Enums.UserStatus;
 import com.nabra.backend.common.model.Enums.UserType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -19,10 +21,10 @@ import java.util.Set;
 @Setter
 public class User extends BaseEntity {
 
-  @Column(nullable = false, length = 50)
+  @Column(nullable = false, length = 50, unique = true)
   private String username;
 
-  @Column(nullable = false, length = 120)
+  @Column(nullable = false, length = 120, unique = true)
   private String email;
 
   /** BCrypt hash. */
@@ -32,6 +34,10 @@ public class User extends BaseEntity {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private UserRole role = UserRole.USER;
+
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private UserStatus status = UserStatus.ACTIVE;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
@@ -61,6 +67,47 @@ public class User extends BaseEntity {
 
   @Column(nullable = false)
   private boolean vibrationEnabled = true;
+
+  /** Email verification flag */
+  @Column(nullable = false)
+  private boolean emailVerified = false;
+
+  /** Last login timestamp for audit purposes */
+  @Column
+  private Instant lastLogin;
+
+  /** User phone number */
+  @Column(length = 20)
+  private String phoneNumber;
+
+  /** Total number of transfers */
+    @Column(nullable = false)
+  private long totalTransfers = 0;
+
+  /** Total hours of platform usage */
+  @Column(nullable = false)
+  private double hoursOfUse = 0.0;
+
+  /** Accuracy percentage (0-100) */
+
+  @Column(nullable = false)
+  private Double accuracy = 0.0;
+
+  /** User Settings - Privacy & Preferences */
+  @Column(nullable = false)
+  private boolean publicProfile = true;
+
+  @Column(nullable = false)
+  private boolean showContactInfo = false;
+
+  @Column(nullable = false)
+  private boolean allowNotifications = true;
+
+  @Column(nullable = false)
+  private boolean allowDataCollection = true;
+
+  @Column(length = 20)
+  private String dataCollectionLevel = "basic";
 
   /**
    * Blocking relation: if A blocks B, then B should not be able to message A.
