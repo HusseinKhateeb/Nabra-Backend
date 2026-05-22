@@ -1,166 +1,216 @@
-# Nabra Backend (Spring Boot Scaffold)
+# Nabra — Backend
 
-This is a **starter backend scaffold** for the Nabra project based on the provided SRS.
+> Spring Boot REST API powering the Nabra Arabic Audio-Visual Speech Recognition app — handles authentication, session management, lip-reading dictionary, and AVSR inference via an embedded Python model.
 
-## Tech
-- Java 17
-- Spring Boot 3.x
-- PostgreSQL
-- JWT Auth (Bearer)
-- Swagger / OpenAPI (springdoc)
+---
 
-## Quickstart
+## 🏗️ Architecture Overview
 
-### 1) Run Postgres
-```bash
-docker compose up -d
+```
+Flutter App
+    │
+    ▼ HTTP + JWT
+Spring Boot API
+    ├── Auth Module        → Register, Login, JWT issuance
+    ├── User Module        → Profiles, settings
+    ├── AVSR Module        → Triggers Python AVSR model, stores results
+    ├── Session History    → Past recognition sessions per user
+    └── Dictionary Module  → Arabic lip-reading reference entries
+         │
+         ├──► PostgreSQL (Neon)     → Persistent data
+         └──► Python AVSR Script   → 3D ResNet-18 + Whisper inference
 ```
 
-### 2) Run the API
-```bash
-mvn spring-boot:run
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Java 17+ |
+| Framework | Spring Boot |
+| Auth | JWT (JSON Web Tokens) |
+| Database | PostgreSQL (hosted on Neon) |
+| AI Inference | Python, PyTorch, 3D ResNet-18, MediaPipe, OpenAI Whisper |
+| Containerization | Docker |
+| Build Tool | Maven |
+
+---
+
+## 📋 Prerequisites
+
+Make sure you have the following installed:
+
+- **Java 17+**
+- **Maven**
+- **Python 3.9+** with the following packages:
+  ```
+  torch
+  mediapipe
+  openai-whisper
+  opencv-python
+  numpy
+  ```
+- **Docker** (optional, for containerized run)
+- A **Neon** account with a PostgreSQL database created → [neon.tech](https://neon.tech)
+
+---
+
+## ⚙️ Environment Setup
+
+The project reads configuration from a `.env` file at the root of the repository. This file is **not committed to version control** — you must create it manually.
+
+### 1. Create your `.env` file
+
+```env
+# Database (Neon PostgreSQL)
+DB_URL=jdbc:postgresql://<your-neon-host>/<your-db-name>?sslmode=require
+DB_USERNAME=your_neon_username
+DB_PASSWORD=your_neon_password
+
+# JWT
+JWT_SECRET=your_jwt_secret_key_here
+JWT_EXPIRATION_MS=86400000
+
+# Server
+SERVER_PORT=8080
+
+# Python / AVSR Model (cross-platform)
+PYTHON_PATH=python
+AVSR_SCRIPT_PATH=src/main/java/com/nabra/backend/modules/lipreading/avsrModels
 ```
 
-### 3) Swagger UI
-Open:
-- `/swagger-ui.html`
+### 2. Windows users — create `.env-win`
 
-## Auth
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
+If you're on Windows, create a separate `.env-win` file for Windows-specific paths:
 
-Use the returned `accessToken` as:
-```
-Authorization: Bearer <TOKEN>
+```env
+# Windows-specific overrides
+PYTHON_PATH=C:\Users\YourName\AppData\Local\Programs\Python\Python39\python.exe
+AVSR_SCRIPT_PATH=src\main\java\com\nabra\backend\modules\lipreading\avsrModels
+FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe
 ```
 
-## Core Modules (Packages)
-- `LipReadingModule` → `com.nabra.backend.modules.lipreading`
-- `SessionHistoryModule` → `com.nabra.backend.modules.sessionhistory`
-- `ChatCommunicationModule` → `com.nabra.backend.modules.chatcommunication`
-- `SmartPredictionModule` → `com.nabra.backend.modules.smartprediction`
-- `VisualDictionaryModule` → `com.nabra.backend.modules.visualdictionary`
-- `UserManagementModule` → `com.nabra.backend.modules.usermanagement`
-- `AdminToolsModule` → `com.nabra.backend.modules.admintools`
+> **Note:** `.env-win` requires a Windows-specific launch config to be picked up. The default Spring Boot launch profile reads from `.env` only.
 
-## ER Entities (JPA)
-- User
-- Session
-- Chat
-- Message
-- LearningProgress
-- DictionaryEntry
-- Report
+### 3. Add AVSR model checkpoints
 
-## Notes
-- Lip reading, STT, and smart prediction endpoints are implemented as **optional** integrations to external AI services.
-  Configure base URLs in `application.yml` under `app.ai.*`.
-- `spring.jpa.hibernate.ddl-auto=update` is for development scaffolding. For production, use migrations.
+The model weights are excluded from version control. Place your trained model files here:
 
-## AVSR Fusion (Lip + Audio)
-
-Endpoint:
-- `POST /api/v1/lipreading/avsr/fuse`
-- `POST /api/v1/lipreading/avsr/fuse-files` (multipart upload)
-
-Behavior:
-- Compares `audioText` with top lip predictions.
-- Selects the most similar lip word as the final result.
-- For `fuse-files`, backend runs audio model on uploaded audio and lip model on uploaded video, then returns the fused final word.
-
-### One-call upload (what you asked for)
-
-Use this endpoint when you want backend to do full AVSR pipeline:
-- `POST /api/v1/lipreading/avsr/fuse-files`
-- form-data fields:
-  - `audioFile` (required)
-  - `videoFile` (required)
-  - `topK` (optional, default 5)
-
-Example curl:
-```bash
-curl -X POST "http://localhost:8080/api/v1/lipreading/avsr/fuse-files" \
-  -H "Authorization: Bearer <TOKEN>" \
-  -F "audioFile=@D:/path/audio.m4a" \
-  -F "videoFile=@D:/path/video.mp4" \
-  -F "topK=5"
+```
+src/main/java/com/nabra/backend/modules/lipreading/avsrModels/
+└── 3D ResNet-18/
+    └── checkpoints/
+        ├── your_model.pth     ← place here
+        └── your_model.pt      ← place here
 ```
 
-### Flutter request example
-```json
-{
-  "audioText": "مرحبا",
-  "lipTopPredictions": [
-    { "word": "مرحبا", "confidence": 82.5 },
-    { "word": "اهلا", "confidence": 10.0 },
-    { "word": "كيفك", "confidence": 4.0 },
-    { "word": "شكرا", "confidence": 2.0 },
-    { "word": "مع السلامة", "confidence": 1.5 }
-  ],
-  "topK": 5
-}
-```
+---
 
-### Optional local model execution from backend
-- If `audioText` is missing, backend can run audio model when `audioPath` is provided.
-- If `lipTopPredictions` is missing, backend can run lip model when `videoPath` is provided.
+## 🚀 Running the Project
 
-Configure in `application.yml`:
-- `app.ai.avsr.pythonCommand`
-- `app.ai.avsr.lip.command`
-- `app.ai.avsr.audio.command`
-
-Supported template variables:
-- `{python}`, `{video}`, `{audio}`, `{topK}`
-
-Recommended lip command:
-```text
-{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D ResNet-18/run_lip_file.py --video {video} --top-k {topK} --use-mediapipe --json-only
-```
-
-Recommended audio command:
-```text
-{python} src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio model/test_asr_ctc.py {audio}
-```
-
-### Webcam test now (before Flutter)
-
-1) Start live audio model in terminal #1:
-```bash
-cd src/main/java/com/nabra/backend/modules/lipreading/avsrModels/audio\ model
-.venv\Scripts\python.exe test_asr_ctc.py --realtime --duration 2 --output realtime_result.txt
-```
-- Press `p` to record short audio clips.
-- Arabic text is appended to `realtime_result.txt`.
-
-2) Start webcam AVSR fusion test in terminal #2:
-```bash
-cd src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D\ ResNet-18
-.venv-win\Scripts\python.exe avsr_webcam_fusion_test.py --use-mediapipe --top-k 5
-```
-- Press `p` to capture lip frames from webcam.
-- Script reads latest audio line from `../audio model/realtime_result.txt`.
-- It prints top-5 lip predictions and final fused word.
-
-3) Backend API test (single endpoint for Flutter later):
-- `POST /api/v1/lipreading/avsr/fuse`
-- Send either:
-  - `audioText + lipTopPredictions`, or
-  - `audioPath + videoPath` (backend runs local models using `app.ai.avsr.*.command`).
-
-### One command (audio + video together)
-
-Run one script only:
+### Option A — Run locally with Maven
 
 ```bash
-cd src/main/java/com/nabra/backend/modules/lipreading/avsrModels/3D\ ResNet-18
-.venv-win\Scripts\python.exe avsr_live_one_command.py --use-mediapipe --top-k 5 --capture-seconds 2
+# 1. Clone the repo
+git clone https://github.com/HusseinKhateeb/Nabra-Backend
+cd Nabra-Backend
+
+# 2. Install Python dependencies
+pip install torch mediapipe openai-whisper opencv-python numpy
+
+# 3. Run the Spring Boot app
+./mvnw spring-boot:run
 ```
 
-How it works:
-- Press `p` once.
-- It records microphone audio and captures webcam lip frames at the same time.
-- Runs audio model + lip model, then prints:
-  - `Audio text`
-  - lip top-5
-  - final fused word (most similar to audio)
+The API will be available at `http://localhost:8080`
+
+---
+
+### Option B — Run with Docker
+
+```bash
+# Build and start
+docker-compose up --build
+
+# Stop
+docker-compose down
+```
+
+> Make sure your `.env` file is present at the root before running Docker — the container reads from it at startup.
+
+---
+
+## 📡 API Endpoints
+
+### Auth
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/login` | Login and receive JWT token |
+
+### AVSR
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/avsr/recognize` | Submit video for AVSR inference |
+| GET | `/api/avsr/history` | Get session history for current user |
+
+### Dictionary
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/dictionary` | Get all lip-reading dictionary entries |
+| GET | `/api/dictionary/search?q=` | Search dictionary by keyword |
+
+### User
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/user/profile` | Get current user profile |
+| PUT | `/api/user/profile` | Update user profile |
+
+> All endpoints except `/api/auth/**` require a valid JWT token in the `Authorization: Bearer <token>` header.
+
+---
+
+## 🗄️ Database
+
+This project uses **PostgreSQL hosted on [Neon](https://neon.tech)** — a serverless Postgres platform.
+
+To set up:
+1. Create a free account at [neon.tech](https://neon.tech)
+2. Create a new project and database
+3. Copy the connection string into your `.env` as `DB_URL`
+
+The schema is managed by Spring Boot's auto-DDL — tables are created automatically on first run.
+
+---
+
+## 📁 Project Structure
+
+```
+src/main/java/com/nabra/backend/
+├── modules/
+│   ├── auth/              → Registration, login, JWT filter
+│   ├── user/              → User profiles
+│   ├── avsr/              → AVSR session handling, Python bridge
+│   ├── lipreading/
+│   │   └── avsrModels/
+│   │       ├── 3D ResNet-18/   → Lip-reading model + checkpoints
+│   │       └── audio model/    → Whisper audio inference script
+│   └── dictionary/        → Lip-reading dictionary entries
+├── config/                → Security config, JWT config, CORS
+└── NabraApplication.java  → Entry point
+```
+
+---
+
+## 🔗 Related
+
+- [Nabra Frontend (Flutter)](https://github.com/HusseinKhateeb/Nabra-Frontend)
+- [Nabra Main Repo](https://github.com/HusseinKhateeb/Nabra)
+
+---
+
+## 👤 Author
+
+**Hussein Khateeb**
+[GitHub](https://github.com/HusseinKhateeb) · [LinkedIn](https://linkedin.com/in/hussein-khateeb-33464a352)
